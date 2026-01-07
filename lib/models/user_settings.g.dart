@@ -18,21 +18,23 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
     };
     return UserSettings(
       weeklySchedule: (fields[0] as Map?)?.cast<int, DaySchedule>(),
-      autoStartTasks: fields[1] as bool,
-      autoEndTasks: fields[2] as bool,
-      notificationBeforeEndMinutes: fields[3] as int,
-      hasCompletedOnboarding: fields[4] as bool,
-      defaultSignalColorHex: fields[5] as String,
-      notificationBeforeStartMinutes: fields[6] as int,
-      showRolloverSuggestions: fields[7] as bool,
-      dataVersion: fields[8] as int,
+      autoStartTasks: fields[1] as bool? ?? false,
+      autoEndTasks: fields[2] as bool? ?? true,
+      notificationBeforeEndMinutes: fields[3] as int? ?? 5,
+      hasCompletedOnboarding: fields[4] as bool? ?? false,
+      defaultSignalColorHex: fields[5] as String? ?? '#2563EB',
+      notificationBeforeStartMinutes: fields[6] as int? ?? 5,
+      showRolloverSuggestions: fields[7] as bool? ?? true,
+      dataVersion: fields[8] as int? ?? 1,
+      timezone: fields[9] as String?,
+      hasCompletedScheduleSetup: fields[10] as bool? ?? false,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserSettings obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(11)
       ..writeByte(0)
       ..write(obj.weeklySchedule)
       ..writeByte(1)
@@ -50,7 +52,11 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       ..writeByte(7)
       ..write(obj.showRolloverSuggestions)
       ..writeByte(8)
-      ..write(obj.dataVersion);
+      ..write(obj.dataVersion)
+      ..writeByte(9)
+      ..write(obj.timezone)
+      ..writeByte(10)
+      ..write(obj.hasCompletedScheduleSetup);
   }
 
   @override

@@ -7,6 +7,7 @@ import '../services/live_activity_service.dart';
 import '../models/task.dart';
 import '../providers/signal_task_provider.dart';
 import 'daily_planning_flow.dart';
+import 'onboarding_screen.dart';
 
 /// Debug screen for testing notifications and Live Activities
 /// Access this from the home screen by tapping the app title 5 times
@@ -205,6 +206,15 @@ class _DebugScreenState extends State<DebugScreen> {
                 'Resets onboarding so it shows again on next app launch.',
             buttonText: 'Reset',
             onPressed: _resetOnboarding,
+          ),
+
+          // Test onboarding flow directly
+          _buildTestCard(
+            title: 'Test Onboarding Flow',
+            description:
+                'Opens the new 4-step onboarding flow directly without resetting. Great for testing the UI.',
+            buttonText: 'Open Onboarding',
+            onPressed: () => _openOnboardingFlow(context),
           ),
 
           const SizedBox(height: 24),
@@ -444,6 +454,19 @@ class _DebugScreenState extends State<DebugScreen> {
     await _settings.resetOnboarding();
     setState(
       () => _status = 'Onboarding reset. Restart the app to see it again.',
+    );
+  }
+
+  void _openOnboardingFlow(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OnboardingScreen(
+          onComplete: () {
+            Navigator.of(context).pop();
+            setState(() => _status = 'Onboarding flow completed!');
+          },
+        ),
+      ),
     );
   }
 

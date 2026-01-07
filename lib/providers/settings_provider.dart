@@ -18,6 +18,9 @@ class SettingsProvider extends ChangeNotifier {
   /// Whether onboarding has been completed
   bool get hasCompletedOnboarding => _settings.hasCompletedOnboarding;
 
+  /// Whether schedule setup has been completed
+  bool get hasCompletedScheduleSetup => _settings.hasCompletedScheduleSetup;
+
   /// Whether auto-start is enabled
   bool get autoStartTasks => _settings.autoStartTasks;
 
@@ -44,6 +47,12 @@ class SettingsProvider extends ChangeNotifier {
   /// Weekly schedule map
   Map<int, DaySchedule> get weeklySchedule => _settings.weeklySchedule;
 
+  /// User's timezone (null means use device default)
+  String? get timezone => _settings.timezone;
+
+  /// Effective timezone (user's setting or device default)
+  String get effectiveTimezone => _settings.effectiveTimezone;
+
   /// Load settings from storage
   Future<void> _loadSettings() async {
     _settings = _storageService.getUserSettings();
@@ -64,6 +73,26 @@ class SettingsProvider extends ChangeNotifier {
   /// Mark onboarding as completed
   Future<void> completeOnboarding() async {
     _settings = _settings.copyWith(hasCompletedOnboarding: true);
+    await _saveSettings();
+  }
+
+  /// Mark schedule setup as completed
+  Future<void> completeScheduleSetup() async {
+    _settings = _settings.copyWith(hasCompletedScheduleSetup: true);
+    await _saveSettings();
+  }
+
+  /// Set the user's timezone
+  /// Pass null to use device default
+  Future<void> setTimezone(String? timezone) async {
+    _settings = _settings.copyWith(timezone: timezone);
+    await _saveSettings();
+  }
+
+  /// Auto-detect and set timezone from Google Calendar
+  /// Called after Google Calendar authentication
+  Future<void> setTimezoneFromCalendar(String calendarTimezone) async {
+    _settings = _settings.copyWith(timezone: calendarTimezone);
     await _saveSettings();
   }
 

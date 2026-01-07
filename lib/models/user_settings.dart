@@ -4,7 +4,7 @@ import 'day_schedule.dart';
 part 'user_settings.g.dart';
 
 /// User preferences and settings
-/// Includes active hours per day, notification preferences, and Google Calendar tokens
+/// Includes active hours per day, notification preferences, timezone, and Google Calendar tokens
 @HiveType(typeId: 16)
 class UserSettings extends HiveObject {
   @HiveField(0)
@@ -34,6 +34,13 @@ class UserSettings extends HiveObject {
   @HiveField(8)
   int dataVersion; // For migration tracking
 
+  @HiveField(9)
+  String? timezone; // IANA timezone name (e.g., "America/New_York")
+  // null = use device default, can be auto-set from Google Calendar
+
+  @HiveField(10)
+  bool hasCompletedScheduleSetup; // Has user configured their focus times?
+
   UserSettings({
     Map<int, DaySchedule>? weeklySchedule,
     this.autoStartTasks = false,
@@ -44,7 +51,15 @@ class UserSettings extends HiveObject {
     this.notificationBeforeStartMinutes = 5,
     this.showRolloverSuggestions = true,
     this.dataVersion = 2, // v2 for new data model
+    this.timezone,
+    this.hasCompletedScheduleSetup = false,
   }) : weeklySchedule = weeklySchedule ?? DaySchedule.defaultWeeklySchedule;
+
+  /// Get the effective timezone
+  /// Returns the user's configured timezone, or the device's local timezone if not set
+  String get effectiveTimezone {
+    return timezone ?? DateTime.now().timeZoneName;
+  }
 
   /// Get the schedule for a specific day
   DaySchedule getScheduleForDay(int dayOfWeek) {
@@ -79,14 +94,10 @@ class UserSettings extends HiveObject {
   }
 
   /// Check if a given time is within active hours for its day
+  /// Uses the new cross-midnight aware method from DaySchedule
   bool isWithinActiveHours(DateTime dateTime) {
     final schedule = getScheduleForDay(dateTime.weekday);
-    if (!schedule.isActiveDay) return false;
-
-    final startTime = schedule.getStartTimeForDate(dateTime);
-    final endTime = schedule.getEndTimeForDate(dateTime);
-
-    return dateTime.isAfter(startTime) && dateTime.isBefore(endTime);
+    return schedule.isTimeWithinActiveHours(dateTime);
   }
 
   /// Create default settings
@@ -103,6 +114,8 @@ class UserSettings extends HiveObject {
     int? notificationBeforeStartMinutes,
     bool? showRolloverSuggestions,
     int? dataVersion,
+    String? timezone,
+    bool? hasCompletedScheduleSetup,
   }) {
     return UserSettings(
       weeklySchedule: weeklySchedule ?? Map.from(this.weeklySchedule),
@@ -119,6 +132,9 @@ class UserSettings extends HiveObject {
       showRolloverSuggestions:
           showRolloverSuggestions ?? this.showRolloverSuggestions,
       dataVersion: dataVersion ?? this.dataVersion,
+      timezone: timezone ?? this.timezone,
+      hasCompletedScheduleSetup:
+          hasCompletedScheduleSetup ?? this.hasCompletedScheduleSetup,
     );
   }
 }

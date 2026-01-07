@@ -1,8 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
+import '../providers/settings_provider.dart';
 import '../services/settings_service.dart';
+import 'onboarding/philosophy_screen.dart';
+import 'onboarding/schedule_setup_screen.dart';
+import 'onboarding/timezone_screen.dart';
+import 'onboarding/first_task_screen.dart';
 
-/// Onboarding screen shown on first app launch
+/// Enhanced Onboarding Flow - 4 step process:
+/// 1. Philosophy Screen - Introduce Signal/Noise concept
+/// 2. Schedule Setup - Configure focus times per day
+/// 3. Timezone - Select timezone (optional, auto-detect available)
+/// 4. First Task - Create first Signal task with guided walkthrough
 class OnboardingScreen extends StatefulWidget {
   final VoidCallback onComplete;
 
@@ -13,179 +23,87 @@ class OnboardingScreen extends StatefulWidget {
 }
 
 class _OnboardingScreenState extends State<OnboardingScreen> {
-  final PageController _pageController = PageController();
-  int _currentPage = 0;
+  int _currentStep = 0;
 
-  final List<_OnboardingPage> _pages = const [
-    _OnboardingPage(
-      title: 'Focus on what matters',
-      body:
-          'Steve Jobs believed that deciding what not to do is as important as deciding what to do.\n\nSignal / Noise helps you identify and protect your most important work.',
-    ),
-    _OnboardingPage(
-      title: 'Define your Signal',
-      body:
-          'Each day, choose 3-5 critical tasks. These are your Signal - the work that actually moves you forward.\n\nEverything else is Noise.',
-    ),
-    _OnboardingPage(
-      title: 'Track your time',
-      body:
-          'Tap a task to start tracking time. The app shows your Signal-to-Noise ratio in real time.\n\nAim for 80% Signal - the golden ratio of productivity.',
-    ),
-    _OnboardingPage(
-      title: 'Stay accountable',
-      body:
-          'Get gentle reminders when you spend too long on Noise, or when you haven\'t tracked any work.\n\nReview your history to spot patterns.',
-    ),
-  ];
+  static const int _totalSteps = 4;
 
-  void _nextPage() {
-    if (_currentPage < _pages.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-    } else {
-      _completeOnboarding();
+  void _nextStep() {
+    if (_currentStep < _totalSteps - 1) {
+      setState(() => _currentStep++);
     }
   }
 
-  void _completeOnboarding() async {
+  void _previousStep() {
+    if (_currentStep > 0) {
+      setState(() => _currentStep--);
+    }
+  }
+
+  void _skipToEnd() {
+    // Skip directly to completing onboarding
+    _completeOnboarding();
+  }
+
+  Future<void> _completeOnboarding() async {
+    // Mark schedule setup as complete
+    final settingsProvider = context.read<SettingsProvider>();
+    await settingsProvider.completeScheduleSetup();
+
+    // Mark onboarding as complete in settings service
     await SettingsService().completeOnboarding();
+
+    // Call the completion callback
     widget.onComplete();
   }
 
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
+  Future<void> _handleTimezoneSelected(String? timezone) async {
+    final settingsProvider = context.read<SettingsProvider>();
+    await settingsProvider.setTimezone(timezone);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: SafeArea(
-        child: Column(
-          children: [
-            // Skip button
-            Align(
-              alignment: Alignment.topRight,
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: TextButton(
-                  onPressed: _completeOnboarding,
-                  child: Text(
-                    'Skip',
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 16),
-                  ),
-                ),
-              ),
-            ),
-
-            // Page content
-            Expanded(
-              child: PageView.builder(
-                controller: _pageController,
-                onPageChanged: (index) {
-                  setState(() => _currentPage = index);
-                },
-                itemCount: _pages.length,
-                itemBuilder: (context, index) {
-                  final page = _pages[index];
-                  return Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          page.title,
-                          style: const TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.black,
-                            height: 1.2,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 32),
-                        Text(
-                          page.body,
-                          style: TextStyle(
-                            fontSize: 17,
-                            color: Colors.grey.shade700,
-                            height: 1.5,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  );
-                },
-              ),
-            ),
-
-            // Page indicator
-            Padding(
-              padding: const EdgeInsets.symmetric(vertical: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: List.generate(
-                  _pages.length,
-                  (index) => AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    margin: const EdgeInsets.symmetric(horizontal: 4),
-                    width: _currentPage == index ? 24 : 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: _currentPage == index
-                          ? Colors.black
-                          : Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-
-            // Continue button
-            Padding(
-              padding: const EdgeInsets.fromLTRB(40, 0, 40, 48),
-              child: SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: _nextPage,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                  ),
-                  child: Text(
-                    _currentPage < _pages.length - 1
-                        ? 'Continue'
-                        : 'Get Started',
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
-        ),
-      ),
+    return PopScope(
+      canPop: _currentStep == 0,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop && _currentStep > 0) {
+          _previousStep();
+        }
+      },
+      child: _buildCurrentStep(),
     );
   }
-}
 
-/// Data class for onboarding page content
-class _OnboardingPage {
-  final String title;
-  final String body;
-
-  const _OnboardingPage({required this.title, required this.body});
+  Widget _buildCurrentStep() {
+    switch (_currentStep) {
+      case 0:
+        return PhilosophyScreen(onContinue: _nextStep, onSkip: _skipToEnd);
+      case 1:
+        return ScheduleSetupScreen(
+          onContinue: _nextStep,
+          onBack: _previousStep,
+          onSkip: _nextStep, // Allow skipping schedule setup
+        );
+      case 2:
+        return Consumer<SettingsProvider>(
+          builder: (context, settings, _) {
+            return TimezoneScreen(
+              onContinue: _nextStep,
+              onBack: _previousStep,
+              onSkip: _nextStep, // Timezone is optional
+              onTimezoneSelected: _handleTimezoneSelected,
+              currentTimezone: settings.timezone,
+            );
+          },
+        );
+      case 3:
+        return FirstTaskScreen(
+          onComplete: _completeOnboarding,
+          onBack: _previousStep,
+          onSkip: _completeOnboarding, // Allow skipping first task
+        );
+      default:
+        return PhilosophyScreen(onContinue: _nextStep, onSkip: _skipToEnd);
+    }
+  }
 }
