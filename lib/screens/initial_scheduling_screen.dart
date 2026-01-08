@@ -12,6 +12,7 @@ import '../providers/signal_task_provider.dart';
 import '../providers/tag_provider.dart';
 import '../providers/settings_provider.dart';
 import '../providers/calendar_provider.dart';
+import '../services/notification_service.dart';
 import '../widgets/scheduling/split_schedule_dialog.dart';
 import '../widgets/common/blinking_dot.dart';
 
@@ -176,14 +177,41 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
     });
 
     try {
-      // Sync all scheduled slots to Google Calendar
       final taskProvider = context.read<SignalTaskProvider>();
+      final settingsProvider = context.read<SettingsProvider>();
+
+      // 1. Sync all scheduled slots to Google Calendar
       final syncedCount = await taskProvider.syncScheduledSlotsToCalendar();
 
       if (syncedCount > 0 && mounted) {
-        // Brief feedback that sync happened (optional - remove if too noisy)
         debugPrint('Synced $syncedCount time slots to Google Calendar');
       }
+
+      // 2. Schedule notifications for all tasks
+      // Get notification timing preferences from settings
+      final minutesBeforeStart =
+          settingsProvider.notificationBeforeStartMinutes;
+      final minutesBeforeEnd = settingsProvider.notificationBeforeEndMinutes;
+
+      for (final task in taskProvider.scheduledTasks) {
+        // Only schedule if user has enabled the relevant notification types
+        if (settingsProvider.enableStartReminders ||
+            settingsProvider.enableEndReminders) {
+          await NotificationService().scheduleTaskNotifications(
+            task: task,
+            minutesBeforeStart: settingsProvider.enableStartReminders
+                ? minutesBeforeStart
+                : 0,
+            minutesBeforeEnd: settingsProvider.enableEndReminders
+                ? minutesBeforeEnd
+                : 0,
+          );
+        }
+      }
+
+      debugPrint(
+        'Scheduled notifications for ${taskProvider.scheduledTasks.length} tasks',
+      );
 
       // Navigate to home screen
       if (mounted) {

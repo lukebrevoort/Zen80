@@ -136,6 +136,10 @@ class _SignalNoiseAppState extends State<SignalNoiseApp>
     _statsProvider = StatsProvider(widget.storageService, SettingsService());
     _rolloverProvider = RolloverProvider(widget.storageService);
 
+    // Wire up notification callbacks for SignalTaskProvider
+    _signalTaskProvider.onAutoEnd = _handleTaskAutoEnded;
+    _signalTaskProvider.onTimerReachedEnd = _handleTimerReachedEnd;
+
     // Wire up sync callback so remote changes refresh SignalTaskProvider
     _calendarProvider.setOnSignalTasksChanged(() {
       _signalTaskProvider.refresh();
@@ -160,6 +164,67 @@ class _SignalNoiseAppState extends State<SignalNoiseApp>
 
     // Reset golden ratio notification status if it's a new day
     SettingsService().resetGoldenRatioIfNewDay();
+  }
+
+  /// Handle when a task is auto-ended (timer reached end and autoEnd is enabled)
+  void _handleTaskAutoEnded(SignalTask task, TimeSlot slot) {
+    final duration = Duration(seconds: slot.accumulatedSeconds);
+
+    // Show task auto-ended notification
+    NotificationService().showTaskAutoEndedNotification(
+      taskTitle: task.title,
+      actualDuration: duration,
+    );
+
+    // Cancel the slot-specific notifications since task has ended
+    NotificationService().cancelSlotNotifications(slot.id);
+
+    // Check for next task and show reminder if enabled
+    if (_settingsProvider.enableNextTaskReminders) {
+      _checkForNextTaskReminder();
+    }
+  }
+
+  /// Handle when timer reaches its planned end time (for UI prompts)
+  void _handleTimerReachedEnd(SignalTask task, TimeSlot slot) {
+    // This callback is for showing a prompt to the user
+    // The actual prompt would typically be shown via a dialog or notification
+    // For now, we'll rely on the scheduled "Task Ending Soon" notification
+    // which was already scheduled when "Start My Day" was pressed
+    debugPrint(
+      'Timer reached end for ${task.title} - user can continue or end',
+    );
+  }
+
+  /// Check if there's a next task scheduled and show reminder
+  void _checkForNextTaskReminder() {
+    final now = DateTime.now();
+    final tasks = _signalTaskProvider.scheduledTasks;
+
+    // Find the next scheduled slot that hasn't started yet
+    TimeSlot? nextSlot;
+    SignalTask? nextTask;
+
+    for (final task in tasks) {
+      for (final slot in task.timeSlots) {
+        if (slot.isDiscarded || slot.hasStarted) continue;
+        if (slot.plannedStartTime.isAfter(now)) {
+          if (nextSlot == null ||
+              slot.plannedStartTime.isBefore(nextSlot.plannedStartTime)) {
+            nextSlot = slot;
+            nextTask = task;
+          }
+        }
+      }
+    }
+
+    if (nextTask != null && nextSlot != null) {
+      final timeUntilStart = nextSlot.plannedStartTime.difference(now);
+      NotificationService().showNextTaskReminder(
+        nextTaskTitle: nextTask.title,
+        timeUntilStart: timeUntilStart,
+      );
+    }
   }
 
   /// Determine which screen to show on app open
