@@ -41,6 +41,15 @@ class SettingsProvider extends ChangeNotifier {
   /// Whether to show rollover suggestions
   bool get showRolloverSuggestions => _settings.showRolloverSuggestions;
 
+  /// Whether start reminders are enabled
+  bool get enableStartReminders => _settings.enableStartReminders;
+
+  /// Whether end reminders are enabled
+  bool get enableEndReminders => _settings.enableEndReminders;
+
+  /// Whether next task reminders are enabled
+  bool get enableNextTaskReminders => _settings.enableNextTaskReminders;
+
   /// Today's schedule
   DaySchedule get todaySchedule => _settings.todaySchedule;
 
@@ -129,6 +138,24 @@ class SettingsProvider extends ChangeNotifier {
   /// Update rollover suggestions setting
   Future<void> setShowRolloverSuggestions(bool value) async {
     _settings = _settings.copyWith(showRolloverSuggestions: value);
+    await _saveSettings();
+  }
+
+  /// Update start reminders setting
+  Future<void> setEnableStartReminders(bool value) async {
+    _settings = _settings.copyWith(enableStartReminders: value);
+    await _saveSettings();
+  }
+
+  /// Update end reminders setting
+  Future<void> setEnableEndReminders(bool value) async {
+    _settings = _settings.copyWith(enableEndReminders: value);
+    await _saveSettings();
+  }
+
+  /// Update next task reminders setting
+  Future<void> setEnableNextTaskReminders(bool value) async {
+    _settings = _settings.copyWith(enableNextTaskReminders: value);
     await _saveSettings();
   }
 

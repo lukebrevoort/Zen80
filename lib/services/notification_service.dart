@@ -3,14 +3,23 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
 
+import '../models/signal_task.dart';
+import '../models/time_slot.dart';
 import 'settings_service.dart';
 
 /// Service for managing all app notifications
 ///
-/// Notification types:
-/// 1. Golden Ratio Achievement (80%+ signal with 6+ hours logged)
-/// 2. Morning Reminder (configurable wake time, default 8am)
-/// 3. Noise Task Warning (1 hour on noise task) 4. Inactivity Reminder (2 hours no activity during active hours)
+/// Notification types per IMPLEMENTATION_PLAN.md:
+/// 1. Task Starting Soon - X minutes before planned start
+/// 2. Task Start Prompt - At planned start time
+/// 3. Task Ending Soon - X minutes before planned end
+/// 4. Task Auto-Ended - When time slot ends (if autoEnd)
+/// 5. Next Task Reminder - After ending, if another task scheduled
+/// 6. Rollover Morning - At active start time for incomplete tasks
+/// 7. Golden Ratio Achievement - 80%+ signal with 6+ hours (legacy)
+/// 8. Morning Planning Reminder - Configurable wake time (legacy)
+/// 9. Noise Task Warning - 1 hour on noise (legacy)
+/// 10. Inactivity Reminder - 2 hours no activity (legacy)
 ///
 /// Note: NO push notifications while Signal timer is running (reward focus)
 /// Live Activities handle the real-time timer display instead
@@ -30,28 +39,49 @@ class NotificationService {
   bool _hasNotifiedNoiseWarning = false;
   bool _isTimerActive = false; // Track if any timer is currently running
 
-  // Notification IDs
+  // Notification IDs - base IDs for different notification types
   static const int _goldenRatioNotificationId = 10;
   static const int _morningReminderNotificationId = 20;
   static const int _noiseWarningNotificationId = 30;
   static const int _inactivityNotificationId = 40;
+  static const int _taskStartingSoonBaseId = 100; // +taskId.hashCode
+  static const int _taskStartPromptBaseId = 200; // +taskId.hashCode
+  static const int _taskEndingSoonBaseId = 300; // +taskId.hashCode
+  static const int _taskAutoEndedBaseId = 400; // +taskId.hashCode
+  static const int _nextTaskReminderBaseId = 500; // +taskId.hashCode
+  static const int _rolloverMorningBaseId = 600; // +taskId.hashCode
 
   /// Initialize the notification service
   Future<void> initialize() async {
     // Initialize timezone for scheduled notifications
     tz_data.initializeTimeZones();
 
-    const darwinSettings = DarwinInitializationSettings(
+    final darwinSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
       requestSoundPermission: true,
       defaultPresentAlert: true,
       defaultPresentBadge: false,
       defaultPresentSound: true,
-      notificationCategories: [],
+      notificationCategories: [
+        DarwinNotificationCategory(
+          'taskStart',
+          actions: [
+            DarwinNotificationAction.plain('start', 'Start Task'),
+            DarwinNotificationAction.plain('snooze', 'Snooze 5m'),
+          ],
+        ),
+        DarwinNotificationCategory(
+          'taskEnding',
+          actions: [
+            DarwinNotificationAction.plain('continue', 'Continue'),
+            DarwinNotificationAction.plain('end', 'End Now'),
+          ],
+        ),
+      ],
     );
 
-    const initSettings = InitializationSettings(
+    final initSettings = InitializationSettings(
       iOS: darwinSettings,
       macOS: darwinSettings,
     );
@@ -97,7 +127,231 @@ class NotificationService {
   }
 
   // ============================================================
-  // 1. GOLDEN RATIO ACHIEVEMENT (80%+ signal with 6+ hours)
+  // NEW: TASK SCHEDULING NOTIFICATIONS
+  // ============================================================
+
+  /// Schedule all notifications for a task's time slots
+  /// Call this when user finalizes their daily schedule
+  Future<void> scheduleTaskNotifications({
+    required SignalTask task,
+    int minutesBeforeStart = 5,
+    int minutesBeforeEnd = 5,
+  }) async {
+    for (final slot in task.timeSlots) {
+      if (slot.isDiscarded || slot.isCompleted) continue;
+
+      await _scheduleSlotNotifications(
+        task: task,
+        slot: slot,
+        minutesBeforeStart: minutesBeforeStart,
+        minutesBeforeEnd: minutesBeforeEnd,
+      );
+    }
+  }
+
+  /// Schedule notifications for a specific time slot
+  Future<void> _scheduleSlotNotifications({
+    required SignalTask task,
+    required TimeSlot slot,
+    required int minutesBeforeStart,
+    required int minutesBeforeEnd,
+  }) async {
+    final now = DateTime.now();
+
+    // Calculate unique notification ID for this slot
+    final slotIdHash = slot.id.hashCode.abs() % 10000;
+
+    // 1. Task Starting Soon (X min before planned start)
+    final startingSoonTime = slot.plannedStartTime.subtract(
+      Duration(minutes: minutesBeforeStart),
+    );
+    if (startingSoonTime.isAfter(now)) {
+      await _scheduleNotification(
+        id: _taskStartingSoonBaseId + slotIdHash,
+        title: '${task.title} starts soon',
+        body: 'Starting in $minutesBeforeStart minutes. Ready to focus?',
+        scheduledTime: startingSoonTime,
+        category: 'taskStart',
+      );
+    }
+
+    // 2. Task Start Prompt (at planned start time)
+    if (slot.plannedStartTime.isAfter(now)) {
+      await _scheduleNotification(
+        id: _taskStartPromptBaseId + slotIdHash,
+        title: 'Time to start: ${task.title}',
+        body: 'Your scheduled focus time is now. Tap to begin.',
+        scheduledTime: slot.plannedStartTime,
+        category: 'taskStart',
+        isTimeSensitive: true,
+      );
+    }
+
+    // 3. Task Ending Soon (X min before planned end)
+    final endingSoonTime = slot.plannedEndTime.subtract(
+      Duration(minutes: minutesBeforeEnd),
+    );
+    if (endingSoonTime.isAfter(now)) {
+      await _scheduleNotification(
+        id: _taskEndingSoonBaseId + slotIdHash,
+        title: '${task.title} ends in $minutesBeforeEnd minutes',
+        body: 'Wrap up or continue past the scheduled time.',
+        scheduledTime: endingSoonTime,
+        category: 'taskEnding',
+      );
+    }
+  }
+
+  /// Schedule a notification at a specific time
+  Future<void> _scheduleNotification({
+    required int id,
+    required String title,
+    required String body,
+    required DateTime scheduledTime,
+    String? category,
+    bool isTimeSensitive = false,
+  }) async {
+    final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
+
+    final darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+      interruptionLevel: isTimeSensitive
+          ? InterruptionLevel.timeSensitive
+          : InterruptionLevel.active,
+      categoryIdentifier: category,
+    );
+
+    final details = NotificationDetails(
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    await _notifications.zonedSchedule(
+      id,
+      title,
+      body,
+      tzScheduledTime,
+      details,
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    );
+  }
+
+  /// Cancel all notifications for a specific time slot
+  Future<void> cancelSlotNotifications(String slotId) async {
+    final slotIdHash = slotId.hashCode.abs() % 10000;
+
+    await _notifications.cancel(_taskStartingSoonBaseId + slotIdHash);
+    await _notifications.cancel(_taskStartPromptBaseId + slotIdHash);
+    await _notifications.cancel(_taskEndingSoonBaseId + slotIdHash);
+    await _notifications.cancel(_taskAutoEndedBaseId + slotIdHash);
+  }
+
+  /// Cancel all notifications for a task
+  Future<void> cancelTaskNotifications(SignalTask task) async {
+    for (final slot in task.timeSlots) {
+      await cancelSlotNotifications(slot.id);
+    }
+  }
+
+  /// Show immediate "Task Auto-Ended" notification
+  Future<void> showTaskAutoEndedNotification({
+    required String taskTitle,
+    required Duration actualDuration,
+  }) async {
+    final durationStr = _formatDuration(actualDuration);
+
+    const darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.active,
+    );
+
+    const details = NotificationDetails(
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    await _notifications.show(
+      _taskAutoEndedBaseId,
+      '$taskTitle session complete! 🎯',
+      'Great work! You focused for $durationStr.',
+      details,
+    );
+  }
+
+  /// Show "Next Task Reminder" notification
+  Future<void> showNextTaskReminder({
+    required String nextTaskTitle,
+    required Duration timeUntilStart,
+  }) async {
+    final minutesUntil = timeUntilStart.inMinutes;
+    final timeStr = minutesUntil > 0 ? 'in $minutesUntil minutes' : 'now';
+
+    const darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.active,
+    );
+
+    const details = NotificationDetails(
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    await _notifications.show(
+      _nextTaskReminderBaseId,
+      'Up next: $nextTaskTitle',
+      'Your next Signal task starts $timeStr.',
+      details,
+    );
+  }
+
+  /// Schedule rollover morning notification for incomplete tasks
+  Future<void> scheduleRolloverMorningNotification({
+    required List<SignalTask> incompleteTasks,
+    required DateTime morningTime,
+  }) async {
+    if (incompleteTasks.isEmpty) return;
+
+    final now = DateTime.now();
+    if (morningTime.isBefore(now)) return;
+
+    final taskCount = incompleteTasks.length;
+    final totalMinutes = incompleteTasks.fold<int>(
+      0,
+      (sum, task) => sum + task.remainingMinutes,
+    );
+
+    final formattedTime = _formatDuration(Duration(minutes: totalMinutes));
+
+    final title = taskCount == 1
+        ? 'Continue "${incompleteTasks.first.title}"?'
+        : '$taskCount tasks to continue';
+
+    final body = taskCount == 1
+        ? 'You have ${incompleteTasks.first.formattedRemainingTime} remaining. Add to today?'
+        : 'You have $formattedTime of remaining work. Add to today\'s schedule?';
+
+    await _scheduleNotification(
+      id: _rolloverMorningBaseId,
+      title: title,
+      body: body,
+      scheduledTime: morningTime,
+      isTimeSensitive: true,
+    );
+  }
+
+  /// Cancel rollover morning notification
+  Future<void> cancelRolloverMorningNotification() async {
+    await _notifications.cancel(_rolloverMorningBaseId);
+  }
+
+  // ============================================================
+  // LEGACY: GOLDEN RATIO ACHIEVEMENT (80%+ signal with 6+ hours)
   // ============================================================
 
   /// Check and notify if golden ratio is achieved
@@ -140,7 +394,7 @@ class NotificationService {
   }
 
   // ============================================================
-  // 2. MORNING REMINDER (configurable, default 8am)
+  // LEGACY: MORNING REMINDER (configurable, default 8am)
   // ============================================================
 
   /// Schedule the daily morning reminder
@@ -198,7 +452,7 @@ class NotificationService {
   }
 
   // ============================================================
-  // 3. NOISE TASK WARNING (1 hour on noise)
+  // LEGACY: NOISE TASK WARNING (1 hour on noise)
   // ============================================================
 
   /// Start monitoring a noise task timer
@@ -277,7 +531,7 @@ class NotificationService {
   }
 
   // ============================================================
-  // 4. INACTIVITY REMINDER (2 hours during active hours)
+  // LEGACY: INACTIVITY REMINDER (2 hours during active hours)
   // ============================================================
 
   /// Start monitoring for inactivity
@@ -341,9 +595,40 @@ class NotificationService {
   // UTILITY METHODS
   // ============================================================
 
+  /// Format duration as readable string
+  String _formatDuration(Duration duration) {
+    final hours = duration.inHours;
+    final minutes = duration.inMinutes % 60;
+
+    if (hours > 0 && minutes > 0) {
+      return '${hours}h ${minutes}m';
+    } else if (hours > 0) {
+      return '${hours}h';
+    } else {
+      return '${minutes}m';
+    }
+  }
+
   /// Handle notification tap
   void _onNotificationTapped(NotificationResponse response) {
-    // Could navigate to specific screen based on notification ID
+    // Handle action buttons
+    final actionId = response.actionId;
+    if (actionId != null) {
+      switch (actionId) {
+        case 'start':
+          // TODO: Navigate to task and start timer
+          break;
+        case 'snooze':
+          // TODO: Snooze notification by 5 minutes
+          break;
+        case 'continue':
+          // TODO: Continue past planned end time
+          break;
+        case 'end':
+          // TODO: End the current task
+          break;
+      }
+    }
     // For now, just opening the app is sufficient
   }
 

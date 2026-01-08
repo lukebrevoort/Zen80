@@ -28,13 +28,16 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       dataVersion: fields[8] as int? ?? 1,
       timezone: fields[9] as String?,
       hasCompletedScheduleSetup: fields[10] as bool? ?? false,
+      enableStartReminders: fields[11] as bool? ?? true,
+      enableEndReminders: fields[12] as bool? ?? true,
+      enableNextTaskReminders: fields[13] as bool? ?? true,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserSettings obj) {
     writer
-      ..writeByte(11)
+      ..writeByte(14)
       ..writeByte(0)
       ..write(obj.weeklySchedule)
       ..writeByte(1)
@@ -56,7 +59,13 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       ..writeByte(9)
       ..write(obj.timezone)
       ..writeByte(10)
-      ..write(obj.hasCompletedScheduleSetup);
+      ..write(obj.hasCompletedScheduleSetup)
+      ..writeByte(11)
+      ..write(obj.enableStartReminders)
+      ..writeByte(12)
+      ..write(obj.enableEndReminders)
+      ..writeByte(13)
+      ..write(obj.enableNextTaskReminders);
   }
 
   @override

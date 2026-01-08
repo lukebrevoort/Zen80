@@ -41,6 +41,15 @@ class UserSettings extends HiveObject {
   @HiveField(10)
   bool hasCompletedScheduleSetup; // Has user configured their focus times?
 
+  @HiveField(11)
+  bool enableStartReminders; // Notify before task starts
+
+  @HiveField(12)
+  bool enableEndReminders; // Notify before task ends
+
+  @HiveField(13)
+  bool enableNextTaskReminders; // Notify about next scheduled task
+
   UserSettings({
     Map<int, DaySchedule>? weeklySchedule,
     this.autoStartTasks = false,
@@ -53,6 +62,9 @@ class UserSettings extends HiveObject {
     this.dataVersion = 2, // v2 for new data model
     this.timezone,
     this.hasCompletedScheduleSetup = false,
+    this.enableStartReminders = true,
+    this.enableEndReminders = true,
+    this.enableNextTaskReminders = true,
   }) : weeklySchedule = weeklySchedule ?? DaySchedule.defaultWeeklySchedule;
 
   /// Get the effective timezone
@@ -116,6 +128,9 @@ class UserSettings extends HiveObject {
     int? dataVersion,
     String? timezone,
     bool? hasCompletedScheduleSetup,
+    bool? enableStartReminders,
+    bool? enableEndReminders,
+    bool? enableNextTaskReminders,
   }) {
     return UserSettings(
       weeklySchedule: weeklySchedule ?? Map.from(this.weeklySchedule),
@@ -135,6 +150,10 @@ class UserSettings extends HiveObject {
       timezone: timezone ?? this.timezone,
       hasCompletedScheduleSetup:
           hasCompletedScheduleSetup ?? this.hasCompletedScheduleSetup,
+      enableStartReminders: enableStartReminders ?? this.enableStartReminders,
+      enableEndReminders: enableEndReminders ?? this.enableEndReminders,
+      enableNextTaskReminders:
+          enableNextTaskReminders ?? this.enableNextTaskReminders,
     );
   }
 }

@@ -117,6 +117,32 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _selectStartReminderTime(SettingsProvider settings) async {
+    final result = await _showDurationPicker(
+      title: 'Start Reminder',
+      subtitle: 'How many minutes before start to notify',
+      currentMinutes: settings.notificationBeforeStartMinutes,
+      options: [1, 2, 5, 10, 15, 30],
+    );
+
+    if (result != null) {
+      await settings.setNotificationBeforeStartMinutes(result);
+    }
+  }
+
+  Future<void> _selectEndReminderTime(SettingsProvider settings) async {
+    final result = await _showDurationPicker(
+      title: 'End Reminder',
+      subtitle: 'How many minutes before end to notify',
+      currentMinutes: settings.notificationBeforeEndMinutes,
+      options: [1, 2, 5, 10, 15, 30],
+    );
+
+    if (result != null) {
+      await settings.setNotificationBeforeEndMinutes(result);
+    }
+  }
+
   void _openFocusTimesSettings() {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -378,6 +404,68 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Notifications section
           _buildSectionHeader('NOTIFICATIONS'),
+
+          // Task notification toggles
+          Consumer<SettingsProvider>(
+            builder: (context, settings, _) {
+              return Column(
+                children: [
+                  _buildSwitchTile(
+                    icon: Icons.alarm,
+                    title: 'Start Reminders',
+                    subtitle: 'Notify before scheduled tasks begin',
+                    value: settings.enableStartReminders,
+                    onChanged: (value) =>
+                        settings.setEnableStartReminders(value),
+                  ),
+                  if (settings.enableStartReminders)
+                    _buildSettingTile(
+                      icon: Icons.timelapse,
+                      title: 'Minutes Before Start',
+                      subtitle: 'How early to send start reminder',
+                      value: '${settings.notificationBeforeStartMinutes} min',
+                      onTap: () => _selectStartReminderTime(settings),
+                    ),
+                  _buildSwitchTile(
+                    icon: Icons.alarm_off,
+                    title: 'End Reminders',
+                    subtitle: 'Notify before scheduled time ends',
+                    value: settings.enableEndReminders,
+                    onChanged: (value) => settings.setEnableEndReminders(value),
+                  ),
+                  if (settings.enableEndReminders)
+                    _buildSettingTile(
+                      icon: Icons.timelapse,
+                      title: 'Minutes Before End',
+                      subtitle: 'How early to send end reminder',
+                      value: '${settings.notificationBeforeEndMinutes} min',
+                      onTap: () => _selectEndReminderTime(settings),
+                    ),
+                  _buildSwitchTile(
+                    icon: Icons.skip_next,
+                    title: 'Next Task Reminders',
+                    subtitle: 'Notify about upcoming tasks after ending',
+                    value: settings.enableNextTaskReminders,
+                    onChanged: (value) =>
+                        settings.setEnableNextTaskReminders(value),
+                  ),
+                  _buildSwitchTile(
+                    icon: Icons.replay,
+                    title: 'Rollover Suggestions',
+                    subtitle: 'Morning reminders for incomplete tasks',
+                    value: settings.showRolloverSuggestions,
+                    onChanged: (value) =>
+                        settings.setShowRolloverSuggestions(value),
+                  ),
+                ],
+              );
+            },
+          ),
+
+          const Divider(height: 1, indent: 20, endIndent: 20),
+          const SizedBox(height: 8),
+
+          // Legacy notification settings
           _buildSettingTile(
             icon: Icons.timer_outlined,
             title: 'Noise Task Alert',
@@ -548,6 +636,37 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const SizedBox(width: 4),
           Icon(Icons.chevron_right, color: Colors.grey.shade400),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSwitchTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: Colors.grey.shade100,
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Icon(icon, color: Colors.black, size: 20),
+      ),
+      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+      ),
+      trailing: Switch.adaptive(
+        value: value,
+        onChanged: onChanged,
+        activeColor: Colors.black,
       ),
     );
   }
