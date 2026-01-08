@@ -5,6 +5,7 @@ A Flutter productivity tracking app that helps you achieve **80%+ Signal Ratio**
 ## 🎯 Core Concept
 
 **Signal vs. Noise Philosophy:**
+
 - **Signal** = Focused work on 3-5 critical daily tasks that move your goals forward
 - **Noise** = Everything else (meetings, emails, admin work, distractions)
 - **Goal** = Achieve 80%+ Signal Ratio by intentionally planning and protecting your focus time
@@ -14,36 +15,42 @@ Satellite helps you identify what matters most each day, schedule dedicated time
 ## ✨ Features
 
 ### 📋 Daily Planning Flow
+
 - **Morning Planning**: Choose 3-5 Signal tasks for the day
 - **Time Estimation**: Estimate how long each task will take
 - **Calendar Integration**: See your existing commitments while planning
 - **Smart Scheduling**: Block time for your Signal tasks in Google Calendar
 
 ### 📅 Google Calendar Integration
+
 - **Two-way sync** with Google Calendar
 - **Import existing events** as Signal tasks
 - **External event handling**: Mark calendar events as Signal work
 - **Automatic time blocking**: Creates calendar events when you schedule tasks
 
 ### ⏱️ Time Tracking
+
 - **Built-in timers** for each task
 - **Actual vs. Estimated**: Track how long tasks really take
 - **Scheduled vs. Unscheduled**: See which tasks still need time blocks
 - **Real-time progress**: Watch your Signal Ratio throughout the day
 
 ### 🔄 Smart Task Rollover
+
 - **End-of-day review**: Evaluate incomplete tasks
 - **Rollover suggestions**: Automatically suggest carrying over unfinished work
 - **Context retention**: Keep your momentum going day-to-day
 - **Clean slate option**: Start fresh when needed
 
 ### 📊 Analytics & Insights
+
 - **Signal Ratio tracking**: Daily and weekly percentage of focused work time
 - **Time breakdown charts**: Visual representation of Signal vs. Noise
 - **Tag-based analytics**: See where your time goes by category
 - **Weekly reviews**: Reflect on patterns and progress
 
 ### 🏷️ Task Organization
+
 - **Tags & categories**: Organize tasks by project, context, or priority
 - **Subtasks**: Break down complex work into manageable pieces
 - **Custom tags**: Create your own organizational system
@@ -52,6 +59,7 @@ Satellite helps you identify what matters most each day, schedule dedicated time
 ## 🚀 Getting Started
 
 ### Prerequisites
+
 - Flutter 3.10.4 or higher
 - Dart 3.0.0 or higher
 - iOS 12.0+ / Android 5.0+ (for mobile)
@@ -60,12 +68,14 @@ Satellite helps you identify what matters most each day, schedule dedicated time
 ### Installation
 
 1. **Clone the repository:**
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/Satellite.git
    cd Satellite
    ```
 
 2. **Install dependencies:**
+
    ```bash
    flutter pub get
    ```
@@ -82,16 +92,17 @@ Satellite helps you identify what matters most each day, schedule dedicated time
      - **Web**: Update OAuth config in web configuration
 
 4. **Run the app:**
+
    ```bash
    # iOS
    flutter run -d ios
-   
+
    # Android
    flutter run -d android
-   
+
    # Web
    flutter run -d chrome
-   
+
    # macOS
    flutter run -d macos
    ```
@@ -99,6 +110,7 @@ Satellite helps you identify what matters most each day, schedule dedicated time
 ## 🏗️ Architecture
 
 ### Tech Stack
+
 - **Framework**: Flutter 3.10.4
 - **State Management**: Provider
 - **Local Storage**: Hive (encrypted NoSQL database)
@@ -107,6 +119,7 @@ Satellite helps you identify what matters most each day, schedule dedicated time
 - **Secure Storage**: flutter_secure_storage (for OAuth tokens)
 
 ### Project Structure
+
 ```
 lib/
 ├── main.dart                    # App entry point
@@ -141,16 +154,19 @@ lib/
 ### Key Design Decisions
 
 **1. External Calendar Events as Fulfillment (Not Addition)**
+
 - When you mark an existing calendar event as Signal work, it **fulfills** your task estimate
 - Example: Task "Study CS" (180 min) + External event "CS Lecture" (60 min) = 120 min remaining
 - This matches the mental model: "This event is WHERE I'll do the work"
 
 **2. Estimate as Goal (Not Running Total)**
+
 - `estimatedMinutes` represents your target outcome
 - `scheduledMinutes` represents allocated time (may exceed estimate)
 - `actualMinutes` represents time actually worked
 
 **3. Daily Planning Flow**
+
 - Forces intentional morning planning
 - Rollover flow ensures incomplete work is reviewed
 - Navigation: Rollover → Daily Planning → Scheduling → Home
@@ -169,21 +185,22 @@ flutter test --coverage
 ```
 
 ### Test Coverage
+
 - Model tests: Core business logic
 - Provider tests: State management
 - Service tests: Calendar sync, rollover logic
-- Widget tests: *(Coming soon)*
+- Widget tests: _(Coming soon)_
 
 ## 📱 Platform Support
 
-| Platform | Status | Notes |
-|----------|--------|-------|
-| iOS | ✅ Supported | iOS 12.0+ |
-| Android | ✅ Supported | Android 5.0+ (API 21+) |
-| Web | ✅ Supported | Modern browsers |
-| macOS | ✅ Supported | macOS 10.14+ |
-| Windows | ✅ Supported | Windows 10+ |
-| Linux | ✅ Supported | GTK-based |
+| Platform | Status       | Notes                  |
+| -------- | ------------ | ---------------------- |
+| iOS      | ✅ Supported | iOS 12.0+              |
+| Android  | ✅ Supported | Android 5.0+ (API 21+) |
+| Web      | ✅ Supported | Modern browsers        |
+| macOS    | ✅ Supported | macOS 10.14+           |
+| Windows  | ✅ Supported | Windows 10+            |
+| Linux    | ✅ Supported | GTK-based              |
 
 ## 🔒 Security & Privacy
 
@@ -194,6 +211,7 @@ flutter test --coverage
 - **No analytics tracking**: Your productivity data is yours alone
 
 ### Files NOT Included in Git (See `.gitignore`)
+
 - `google-services.json` (Android OAuth)
 - `GoogleService-Info.plist` (iOS OAuth)
 - `credentials.json` (Desktop OAuth)
@@ -203,6 +221,7 @@ flutter test --coverage
 ## 🛠️ Development
 
 ### Code Generation
+
 Some models use code generation for JSON serialization:
 
 ```bash
@@ -214,6 +233,7 @@ flutter pub run build_runner watch
 ```
 
 ### Debugging
+
 - **Debug screen**: Available in settings for troubleshooting
 - **Verbose logging**: Check console for sync operations
 - **Hive Inspector**: Use Hive boxes viewer for database inspection
@@ -221,6 +241,7 @@ flutter pub run build_runner watch
 ## 🗺️ Roadmap
 
 ### Current Version (v0.1.0)
+
 - ✅ Core Signal/Noise task tracking
 - ✅ Google Calendar two-way sync
 - ✅ Daily planning and rollover flows
@@ -228,6 +249,7 @@ flutter pub run build_runner watch
 - ✅ Basic analytics (Signal Ratio, weekly stats)
 
 ### Upcoming Features
+
 - [ ] Widget support (iOS Live Activities, Android Home Screen)
 - [ ] Offline mode improvements
 - [ ] Recurring tasks
@@ -242,6 +264,7 @@ flutter pub run build_runner watch
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 ### Development Setup
+
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/amazing-feature`
 3. Make your changes
@@ -251,6 +274,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 7. Open a Pull Request
 
 ### Coding Standards
+
 - Follow [Dart style guide](https://dart.dev/guides/language/effective-dart/style)
 - Add tests for new features
 - Update documentation for API changes
@@ -270,7 +294,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 - **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/Satellite/issues)
 - **Discussions**: [GitHub Discussions](https://github.com/YOUR_USERNAME/Satellite/discussions)
-- **Email**: your-email@example.com *(optional)*
+- **Email**: <luke@brevoort.com>
 
 ---
 
