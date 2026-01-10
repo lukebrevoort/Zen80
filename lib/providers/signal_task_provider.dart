@@ -1235,6 +1235,74 @@ class SignalTaskProvider extends ChangeNotifier {
 
   // ============ Phase: "Start My Day" Calendar Sync ============
 
+  /// Sync a single time slot to Google Calendar if eligible.
+  /// Called when user schedules a slot AFTER "Start My Day" has already been completed.
+  ///
+  /// This creates a calendar event for the slot if it:
+  /// 1. Is for today
+  /// 2. Doesn't already have a Google Calendar event ID
+  /// 3. Is not discarded
+  /// 4. Is not imported from external calendar
+  ///
+  /// This mirrors the eligibility checks in [syncScheduledSlotsToCalendar] but
+  /// operates on a single slot for use in mid-day scheduling flows.
+  Future<bool> syncTimeSlotToCalendarIfNeeded(
+    SignalTask task,
+    TimeSlot slot,
+  ) async {
+    try {
+      // Only sync if connected to Google Calendar
+      if (!GoogleCalendarService().isConnected) {
+        return false;
+      }
+
+      final today = DateTime.now();
+
+      // Skip if:
+      // - Slot already has a calendar event (avoid duplicates)
+      // - Slot is discarded
+      // - Slot is for a different day
+      // - Slot is imported from external calendar (we don't own it)
+      // - Slot has already been synced
+      if (slot.googleCalendarEventId != null ||
+          slot.isDiscarded ||
+          slot.isImportedFromExternal ||
+          slot.hasSyncedToCalendar ||
+          !_isSameDay(slot.plannedStartTime, today)) {
+        return false;
+      }
+
+      // Find the slot in the task
+      final slotIndex = task.timeSlots.indexWhere((s) => s.id == slot.id);
+      if (slotIndex == -1) {
+        return false;
+      }
+
+      // Create updated slot and task immutably to prevent race conditions
+      final updatedSlots = List<TimeSlot>.from(task.timeSlots);
+      updatedSlots[slotIndex] = slot.copyWith(hasSyncedToCalendar: true);
+      final updatedTask = task.copyWith(timeSlots: updatedSlots);
+
+      // Persist to storage
+      await _storageService.updateSignalTask(updatedTask);
+
+      // Update local list if this task is for the selected date
+      final taskIndex = _tasks.indexWhere((t) => t.id == task.id);
+      if (taskIndex != -1) {
+        _tasks[taskIndex] = updatedTask;
+        notifyListeners();
+      }
+
+      // Queue the calendar event creation
+      await SyncService().queueCreateEvent(task: updatedTask, slot: updatedSlots[slotIndex]);
+
+      return true;
+    } catch (e) {
+      debugPrint('Error syncing time slot to calendar: $e');
+      return false;
+    }
+  }
+
   /// Sync all scheduled slots for today to Google Calendar.
   /// Called when user clicks "Start My Day" in the initial scheduling screen.
   ///

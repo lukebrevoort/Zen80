@@ -324,6 +324,7 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
     Duration duration,
   ) async {
     final provider = context.read<SignalTaskProvider>();
+    final settingsProvider = context.read<SettingsProvider>();
     final endTime = startTime.add(duration);
 
     final slot = TimeSlot(
@@ -334,6 +335,40 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
     );
 
     await provider.addTimeSlotToTask(task.id, slot);
+
+    // Sync this new slot to Google Calendar (for slots added after initial scheduling)
+    // Get the updated task with the new slot
+    final updatedTask = provider.getTask(task.id);
+    if (updatedTask != null) {
+      final addedSlot = updatedTask.timeSlots.firstWhere(
+        (s) => s.id == slot.id,
+        orElse: () => slot,
+      );
+      try {
+        await provider.syncTimeSlotToCalendarIfNeeded(updatedTask, addedSlot);
+      } catch (e) {
+        debugPrint('Failed to sync slot to calendar: $e');
+      }
+
+      // Schedule notifications for this new slot
+      try {
+      if (settingsProvider.enableStartReminders ||
+          settingsProvider.enableEndReminders) {
+        await NotificationService().scheduleSlotNotifications(
+          task: updatedTask,
+          slot: addedSlot,
+          minutesBeforeStart: settingsProvider.enableStartReminders
+              ? settingsProvider.notificationBeforeStartMinutes
+              : 0,
+          minutesBeforeEnd: settingsProvider.enableEndReminders
+              ? settingsProvider.notificationBeforeEndMinutes
+              : 0,
+        );
+      }
+      } catch (e) {
+        debugPrint('Failed to schedule notifications: $e');
+      }
+    }
 
     // Add to calendar with bounds checking
     _addSignalTaskToCalendar(task, slot);
@@ -605,7 +640,15 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
       (s) =>
           s.plannedStartTime.hour == event.startTime!.hour &&
           s.plannedStartTime.minute == event.startTime!.minute,
+      orElse: () => throw StateError('Slot not found for reschedule'),
     );
+
+    // Cancel existing notifications for this slot before updating
+    try {
+      await NotificationService().cancelSlotNotifications(slot.id);
+    } catch (e) {
+      debugPrint('Failed to cancel notifications: $e');
+    }
 
     final newStart = DateTime(
       _today.year,
@@ -624,12 +667,33 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
       endTime: newEnd,
     );
 
+    // Schedule new notifications for the updated slot
+    final updatedSlot = slot.copyWith(
+      plannedStartTime: newStart,
+      plannedEndTime: newEnd,
+    );
+
+    try {
+    if (settingsProvider.enableStartReminders ||
+        settingsProvider.enableEndReminders) {
+      await NotificationService().scheduleSlotNotifications(
+        task: task,
+        slot: updatedSlot,
+        minutesBeforeStart: settingsProvider.enableStartReminders
+            ? settingsProvider.notificationBeforeStartMinutes
+            : 0,
+        minutesBeforeEnd: settingsProvider.enableEndReminders
+            ? settingsProvider.notificationBeforeEndMinutes
+            : 0,
+      );
+    }
+    } catch (e) {
+      debugPrint('Failed to schedule notifications: $e');
+    }
+
     // Update calendar with bounds checking
     _eventController.remove(event);
-    _addSignalTaskToCalendar(
-      task,
-      slot.copyWith(plannedStartTime: newStart, plannedEndTime: newEnd),
-    );
+    _addSignalTaskToCalendar(task, updatedSlot);
   }
 
   Future<void> _removeSchedule(
@@ -643,7 +707,15 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
       (s) =>
           s.plannedStartTime.hour == event.startTime!.hour &&
           s.plannedStartTime.minute == event.startTime!.minute,
+      orElse: () => throw StateError('Slot not found for reschedule'),
     );
+
+    // Cancel notifications for this slot before removing
+    try {
+      await NotificationService().cancelSlotNotifications(slot.id);
+    } catch (e) {
+      debugPrint('Failed to cancel notifications: $e');
+    }
 
     await provider.removeTimeSlot(task.id, slot.id);
 

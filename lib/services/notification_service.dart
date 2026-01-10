@@ -150,6 +150,25 @@ class NotificationService {
   }
 
   /// Schedule notifications for a specific time slot
+  /// This is the public version that can be called from scheduling screens
+  /// when a single slot is added or rescheduled.
+  Future<void> scheduleSlotNotifications({
+    required SignalTask task,
+    required TimeSlot slot,
+    int minutesBeforeStart = 5,
+    int minutesBeforeEnd = 5,
+  }) async {
+    if (slot.isDiscarded || slot.isCompleted) return;
+
+    await _scheduleSlotNotifications(
+      task: task,
+      slot: slot,
+      minutesBeforeStart: minutesBeforeStart,
+      minutesBeforeEnd: minutesBeforeEnd,
+    );
+  }
+
+  /// Schedule notifications for a specific time slot (internal implementation)
   Future<void> _scheduleSlotNotifications({
     required SignalTask task,
     required TimeSlot slot,
