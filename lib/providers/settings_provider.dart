@@ -8,8 +8,35 @@ class SettingsProvider extends ChangeNotifier {
 
   UserSettings _settings = UserSettings.defaults;
 
+  /// Ephemeral per-day effective start time overrides.
+  /// When a user starts a task before their scheduled focus time,
+  /// we extend the focus window for that day to include the early start.
+  /// Key: date string (yyyy-MM-dd), Value: effective start hour (0-23)
+  /// Also stores minute for precision: hour * 60 + minute
+  final Map<String, int> _dailyEffectiveStartMinutes = {};
+
+  /// Whether the user has seen the early start education dialog
+  bool _hasSeenEarlyStartEducation = false;
+
   SettingsProvider(this._storageService) {
     _loadSettings();
+    _loadEarlyStartEducationFlag();
+  }
+
+  /// Load the early start education flag from storage
+  Future<void> _loadEarlyStartEducationFlag() async {
+    _hasSeenEarlyStartEducation =
+        _storageService.getBool('hasSeenEarlyStartEducation') ?? false;
+  }
+
+  /// Whether the user has seen the early start education
+  bool get hasSeenEarlyStartEducation => _hasSeenEarlyStartEducation;
+
+  /// Mark that the user has seen the early start education
+  Future<void> markEarlyStartEducationSeen() async {
+    _hasSeenEarlyStartEducation = true;
+    await _storageService.setBool('hasSeenEarlyStartEducation', true);
+    notifyListeners();
   }
 
   /// Current user settings
@@ -61,6 +88,120 @@ class SettingsProvider extends ChangeNotifier {
 
   /// Effective timezone (user's setting or device default)
   String get effectiveTimezone => _settings.effectiveTimezone;
+
+  // ============ Effective Focus Time (Early Start Support) ============
+
+  /// Get the date key for a DateTime (yyyy-MM-dd)
+  String _dateKey(DateTime date) {
+    return '${date.year}-${date.month.toString().padLeft(2, '0')}-${date.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Get the effective start time for a given date.
+  /// Returns the earlier of: configured focus start OR earliest task start that day.
+  /// Returns null if no override exists (use configured schedule).
+  DateTime? getEffectiveStartTime(DateTime date) {
+    final key = _dateKey(date);
+    final overrideMinutes = _dailyEffectiveStartMinutes[key];
+    if (overrideMinutes == null) return null;
+
+    final hour = overrideMinutes ~/ 60;
+    final minute = overrideMinutes % 60;
+    return DateTime(date.year, date.month, date.day, hour, minute);
+  }
+
+  /// Get the effective start hour for today (for calendar display).
+  /// Returns the configured start hour OR the override if user started early.
+  int getEffectiveStartHourForDate(DateTime date) {
+    final override = getEffectiveStartTime(date);
+    if (override != null) {
+      return override.hour;
+    }
+    final schedule = _settings.getScheduleForDay(date.weekday);
+    return schedule.activeStartHour;
+  }
+
+  /// Get today's effective start hour
+  int get todayEffectiveStartHour {
+    return getEffectiveStartHourForDate(DateTime.now());
+  }
+
+  /// Check if a time is before the configured focus start time for that day
+  bool isBeforeFocusTime(DateTime time) {
+    final schedule = _settings.getScheduleForDay(time.weekday);
+    final focusStart = DateTime(
+      time.year,
+      time.month,
+      time.day,
+      schedule.activeStartHour,
+      schedule.activeStartMinute,
+    );
+    return time.isBefore(focusStart);
+  }
+
+  /// Extend focus time for a specific date to include an earlier start.
+  /// Called when user starts a task before their configured focus time.
+  /// Returns true if this is the first early start today (for nudge display).
+  bool extendFocusTimeForDate(DateTime date, DateTime startTime) {
+    final schedule = _settings.getScheduleForDay(date.weekday);
+    final key = _dateKey(date);
+
+    // Check if we're actually before focus time
+    final focusStart = DateTime(
+      date.year,
+      date.month,
+      date.day,
+      schedule.activeStartHour,
+      schedule.activeStartMinute,
+    );
+
+    if (!startTime.isBefore(focusStart)) {
+      return false; // Not an early start
+    }
+
+    // Check if we already have an override for today
+    final existingOverride = _dailyEffectiveStartMinutes[key];
+    final newMinutes = startTime.hour * 60 + startTime.minute;
+
+    // Only update if this is earlier than any existing override
+    if (existingOverride == null || newMinutes < existingOverride) {
+      _dailyEffectiveStartMinutes[key] = newMinutes;
+      notifyListeners();
+
+      // Return true if this is the first override today (for showing nudge)
+      return existingOverride == null;
+    }
+
+    return false;
+  }
+
+  /// Clear the effective start time override for a date.
+  /// Called if user manually adjusts their schedule.
+  void clearEffectiveStartOverride(DateTime date) {
+    final key = _dateKey(date);
+    if (_dailyEffectiveStartMinutes.containsKey(key)) {
+      _dailyEffectiveStartMinutes.remove(key);
+      notifyListeners();
+    }
+  }
+
+  /// Check if today has an effective start time override (user started early)
+  bool get hasEarlyStartToday {
+    final key = _dateKey(DateTime.now());
+    return _dailyEffectiveStartMinutes.containsKey(key);
+  }
+
+  /// Get the formatted effective start time for today (for display)
+  String? get formattedEffectiveStartToday {
+    final effectiveStart = getEffectiveStartTime(DateTime.now());
+    if (effectiveStart == null) return null;
+
+    final hour = effectiveStart.hour;
+    final minute = effectiveStart.minute;
+    final period = hour >= 12 ? 'PM' : 'AM';
+    final displayHour = hour > 12 ? hour - 12 : (hour == 0 ? 12 : hour);
+    final displayMinute = minute.toString().padLeft(2, '0');
+    return '$displayHour:$displayMinute $period';
+  }
 
   /// Load settings from storage
   Future<void> _loadSettings() async {

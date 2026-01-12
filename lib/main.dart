@@ -280,21 +280,39 @@ class _SignalNoiseAppState extends State<SignalNoiseApp>
 
   /// Set the initial screen based on normal app flow (no rollover)
   void _setNormalInitialScreen() {
+    // PRIORITY CHECK: If there's an active timer running, always go to HomeScreen
+    // This prevents forcing users to reschedule when they're in the middle of work
+    // (e.g., ad-hoc session still running after a scheduled slot's end time passed)
+    if (_signalTaskProvider.hasActiveTimer) {
+      _initialScreen = const HomeScreen();
+      setState(() {
+        _isInitialized = true;
+      });
+      return;
+    }
+
     // Check if user has tasks planned for today
     final todayTasks = _signalTaskProvider.tasks;
     final hasPlannedToday = todayTasks.isNotEmpty;
 
     if (hasPlannedToday) {
-      // Check if all tasks are scheduled
-      final hasUnscheduledTasks =
-          _signalTaskProvider.unscheduledTasks.isNotEmpty;
+      // Check if user has ALREADY set up their day (has any scheduled slots)
+      // This distinguishes between:
+      // 1. Tasks just added but never scheduled → Force InitialSchedulingScreen
+      // 2. Tasks that were scheduled (even if slots are now missed) → Go to HomeScreen
+      //
+      // We should NOT force users to reschedule missed slots - that's their choice.
+      // Missed slots are just part of the day, not a blocking condition.
+      final hasAnyScheduledSlots =
+          _signalTaskProvider.scheduledTasks.isNotEmpty;
 
-      if (hasUnscheduledTasks) {
-        // User has tasks but not all are scheduled - go to scheduling screen
-        _initialScreen = const InitialSchedulingScreen();
-      } else {
-        // User already planned and scheduled today - go straight to dashboard
+      if (hasAnyScheduledSlots) {
+        // User already set up their day - go straight to dashboard
+        // Even if some tasks still need scheduling, don't block them
         _initialScreen = const HomeScreen();
+      } else {
+        // User has tasks but NONE are scheduled yet - this is initial setup
+        _initialScreen = const InitialSchedulingScreen();
       }
     } else {
       // User hasn't planned today - show planning screen

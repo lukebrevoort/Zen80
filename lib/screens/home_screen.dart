@@ -90,8 +90,27 @@ class _HomeScreenState extends State<HomeScreen> {
     final schedule = settingsProvider.todaySchedule;
     final now = DateTime.now();
 
-    // Get elapsed minutes from start time until now (capped at end time)
-    final elapsedMinutes = schedule.getElapsedMinutes(now);
+    // Use effective start time if the user started early today.
+    // This ensures early work (before configured start) counts toward the ratio.
+    final effectiveStart = settingsProvider.getEffectiveStartTime(
+      DateTime(now.year, now.month, now.day),
+    );
+
+    int elapsedMinutes;
+    if (effectiveStart != null) {
+      final effectiveEnd = schedule.getEndTimeForDate(now);
+
+      if (!now.isAfter(effectiveStart)) {
+        elapsedMinutes = 0;
+      } else {
+        final cappedNow = now.isAfter(effectiveEnd) ? effectiveEnd : now;
+        elapsedMinutes = cappedNow.difference(effectiveStart).inMinutes;
+        if (elapsedMinutes < 0) elapsedMinutes = 0;
+      }
+    } else {
+      // Default behavior: elapsed since configured start
+      elapsedMinutes = schedule.getElapsedMinutes(now);
+    }
 
     if (elapsedMinutes == 0) return 0;
 
@@ -837,6 +856,7 @@ class _DashboardTaskCard extends StatelessWidget {
     // 2. Session splitting (gaps >= 15 min create new slot)
     // 3. Finding the best slot to use (nearest scheduled, or create ad-hoc)
     final now = DateTime.now();
+    final settingsProvider = context.read<SettingsProvider>();
     TimeSlot? preferredSlot;
 
     if (task.timeSlots.isNotEmpty) {
@@ -872,7 +892,176 @@ class _DashboardTaskCard extends StatelessWidget {
     // - Checking if we should resume a recent slot (gap < 15 min)
     // - Using the preferred slot if no recent slot to resume
     // - Creating a new slot if needed
-    await taskProvider.smartStartTask(task.id, preferredSlot: preferredSlot);
+    final result = await taskProvider.smartStartTask(
+      task.id,
+      preferredSlot: preferredSlot,
+    );
+
+    // Check for early start (before focus time) and handle nudge
+    final startTime = result['startTime'] as DateTime;
+    final isEarlyStart = settingsProvider.isBeforeFocusTime(startTime);
+
+    if (isEarlyStart) {
+      // Extend focus time for this day and check if we should show nudge
+      final isFirstEarlyStartToday = settingsProvider.extendFocusTimeForDate(
+        DateTime(now.year, now.month, now.day),
+        startTime,
+      );
+
+      if (!context.mounted) return;
+
+      if (!settingsProvider.hasSeenEarlyStartEducation) {
+        // First time ever - show educational dialog
+        _showEarlyStartEducationDialog(context, settingsProvider);
+      } else if (isFirstEarlyStartToday) {
+        // Subsequent times, first early start today - show subtle toast
+        _showEarlyStartToast(context, settingsProvider);
+      }
+    }
+  }
+
+  /// Show educational dialog for first-time early start
+  void _showEarlyStartEducationDialog(
+    BuildContext context,
+    SettingsProvider settingsProvider,
+  ) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 32, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Friendly Icon
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  Icons.wb_sunny_rounded,
+                  color: Colors.orange.shade500,
+                  size: 32,
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Friendly Title
+              const Text(
+                'Early Start!',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 12),
+
+              // Informative Body
+              Text(
+                'You\'re starting before your scheduled focus time. We\'ve extended your focus window for today so your stats stay accurate.',
+                style: TextStyle(
+                  fontSize: 15,
+                  color: Colors.grey.shade600,
+                  height: 1.4,
+                ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 24),
+
+              // Tip Box
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.lightbulb_outline,
+                      size: 20,
+                      color: Colors.blue.shade700,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Tip: Your schedule is a guideline. It\'s always okay to work when you feel ready!',
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Colors.blue.shade800,
+                          height: 1.3,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 32),
+
+              // Action Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () {
+                    settingsProvider.markEarlyStartEducationSeen();
+                    Navigator.of(context).pop();
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'Got it',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Show subtle toast for subsequent early starts
+  void _showEarlyStartToast(
+    BuildContext context,
+    SettingsProvider settingsProvider,
+  ) {
+    final effectiveStart = settingsProvider.formattedEffectiveStartToday;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.schedule, color: Colors.white, size: 18),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                effectiveStart != null
+                    ? 'Focus window extended to $effectiveStart for today'
+                    : 'Focus window extended for today',
+              ),
+            ),
+          ],
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.blueGrey.shade700,
+        duration: const Duration(seconds: 3),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+    );
   }
 
   Widget _buildElapsedTime() {

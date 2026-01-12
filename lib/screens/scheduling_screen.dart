@@ -136,9 +136,17 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
     SettingsProvider settingsProvider,
   ) {
     final schedule = settingsProvider.todaySchedule;
-    final activeMinutes = schedule.activeMinutes;
 
-    if (activeMinutes == 0) return 0;
+    // Use effective focus window if the user started early.
+    // This affects the denominator (total focus window minutes).
+    final effectiveStart = settingsProvider.getEffectiveStartTime(_today);
+    final effectiveEnd = schedule.getEndTimeForDate(_today);
+
+    final activeMinutes = effectiveStart != null
+        ? effectiveEnd.difference(effectiveStart).inMinutes
+        : schedule.activeMinutes;
+
+    if (activeMinutes <= 0) return 0;
 
     final signalMinutes = taskProvider.totalEstimatedMinutes;
     return (signalMinutes / activeMinutes).clamp(0.0, 1.0);
@@ -1098,19 +1106,19 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
 
     // Schedule new notifications for the updated slot
     try {
-    if (settingsProvider.enableStartReminders ||
-        settingsProvider.enableEndReminders) {
-      await NotificationService().scheduleSlotNotifications(
-        task: task,
-        slot: updatedSlot,
-        minutesBeforeStart: settingsProvider.enableStartReminders
-            ? settingsProvider.notificationBeforeStartMinutes
-            : 0,
-        minutesBeforeEnd: settingsProvider.enableEndReminders
-            ? settingsProvider.notificationBeforeEndMinutes
-            : 0,
-      );
-    }
+      if (settingsProvider.enableStartReminders ||
+          settingsProvider.enableEndReminders) {
+        await NotificationService().scheduleSlotNotifications(
+          task: task,
+          slot: updatedSlot,
+          minutesBeforeStart: settingsProvider.enableStartReminders
+              ? settingsProvider.notificationBeforeStartMinutes
+              : 0,
+          minutesBeforeEnd: settingsProvider.enableEndReminders
+              ? settingsProvider.notificationBeforeEndMinutes
+              : 0,
+        );
+      }
     } catch (e) {
       debugPrint('Failed to schedule notifications: \$e');
     }
@@ -1453,9 +1461,13 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
     final percentage = (ratio * 100).toInt();
     final schedule = settingsProvider.todaySchedule;
 
-    // Calculate display start hour (one hour before active start hour for buffer)
-    final displayStartHour = schedule.activeStartHour > 0
-        ? schedule.activeStartHour - 1
+    // Calculate display start hour using effective start (respects early starts)
+    // Use the earlier of: configured focus start OR any early start override
+    final effectiveStartHour = settingsProvider.getEffectiveStartHourForDate(
+      _today,
+    );
+    final displayStartHour = effectiveStartHour > 0
+        ? effectiveStartHour - 1
         : 0;
 
     return Scaffold(

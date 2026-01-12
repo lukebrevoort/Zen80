@@ -599,7 +599,19 @@ class _TimeEstimatesStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final settingsProvider = context.watch<SettingsProvider>();
-    final activeMinutes = settingsProvider.todaySchedule.activeMinutes;
+    final schedule = settingsProvider.todaySchedule;
+
+    // Use effective focus window if the user started early today.
+    final today = DateTime.now();
+    final effectiveStart = settingsProvider.getEffectiveStartTime(
+      DateTime(today.year, today.month, today.day),
+    );
+    final effectiveEnd = schedule.getEndTimeForDate(today);
+
+    final activeMinutes = effectiveStart != null
+        ? effectiveEnd.difference(effectiveStart).inMinutes
+        : schedule.activeMinutes;
+
     final ratio = activeMinutes > 0
         ? (totalMinutes / activeMinutes).clamp(0.0, 1.0)
         : 0.0;

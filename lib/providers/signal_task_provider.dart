@@ -565,9 +565,17 @@ class SignalTaskProvider extends ChangeNotifier {
     }
   }
 
+  /// Result of a smart start operation, including early start info for nudge display
+  static const String _earlyStartKey = 'isEarlyStart';
+  static const String _slotIdKey = 'slotId';
+  static const String _startTimeKey = 'startTime';
+
   /// Smart start: Determines whether to resume existing slot or create new one based on gap
-  /// Returns the slot ID that was started (either existing or newly created)
-  Future<String> smartStartTask(
+  /// Returns a map containing:
+  /// - 'slotId': The slot ID that was started (either existing or newly created)
+  /// - 'isEarlyStart': Whether this start is before the user's configured focus time
+  /// - 'startTime': The actual start time (for extending focus window)
+  Future<Map<String, dynamic>> smartStartTask(
     String taskId, {
     TimeSlot? preferredSlot,
   }) async {
@@ -624,28 +632,38 @@ class SignalTaskProvider extends ChangeNotifier {
         await _syncSlotToCalendar(resumedTask, resumedSlot);
       }
 
-      return lastSlot.id;
+      // Resume is never an "early start" - we already started this session earlier
+      return {
+        _slotIdKey: lastSlot.id,
+        _earlyStartKey: false,
+        _startTimeKey: now,
+      };
     }
 
     // Gap >= 15 min OR no previous slot - need to use/create a slot
     String slotIdToStart;
 
     if (preferredSlot != null) {
-      // If a preferred slot was passed and it hasn't been started, use it
-      if (!preferredSlot.hasStarted) {
+      // A preferred slot from the UI is only a *suggestion*.
+      // We still must respect the 30-minute proximity rule so we don't hijack
+      // a far-future scheduled slot when the user starts early.
+      const slotProximityThreshold = Duration(minutes: 30);
+      final timeUntilPreferred = preferredSlot.plannedStartTime.difference(now);
+      final preferredIsCloseEnough =
+          timeUntilPreferred.abs() <= slotProximityThreshold;
+
+      if (!preferredSlot.hasStarted && preferredIsCloseEnough) {
+        // Use the preferred scheduled slot - it's close enough in time
         slotIdToStart = preferredSlot.id;
       } else {
-        // Preferred slot was already used, create a new one
+        // Preferred slot is either already used OR too far away -> create ad-hoc.
+        final remainingTime = task.remainingMinutes > 0
+            ? task.remainingMinutes
+            : task.estimatedMinutes;
         final newSlot = TimeSlot(
           id: _uuid.v4(),
           plannedStartTime: now,
-          plannedEndTime: now.add(
-            Duration(
-              minutes: task.remainingMinutes > 0
-                  ? task.remainingMinutes
-                  : task.estimatedMinutes,
-            ),
-          ),
+          plannedEndTime: now.add(Duration(minutes: remainingTime)),
           linkedSubTaskIds: preferredSlot.linkedSubTaskIds,
         );
         task.addTimeSlot(newSlot);
@@ -661,19 +679,51 @@ class SignalTaskProvider extends ChangeNotifier {
       task.addTimeSlot(newSlot);
       slotIdToStart = newSlot.id;
     } else {
-      // Find the best slot to use (nearest scheduled, or create new if all used)
+      // Find the best slot to use, respecting the 30-minute threshold.
+      // If we're starting more than 30 minutes before the nearest scheduled slot,
+      // create an ad-hoc slot instead of hijacking the scheduled one.
       final unusedSlots = task.timeSlots
           .where((s) => !s.hasStarted && !s.isDiscarded)
           .toList();
 
+      // Threshold: Only use a scheduled slot if it starts within 30 minutes
+      const slotProximityThreshold = Duration(minutes: 30);
+
       if (unusedSlots.isNotEmpty) {
-        // Use the nearest unused slot
+        // Sort by proximity to now
         unusedSlots.sort((a, b) {
           final aDiff = a.plannedStartTime.difference(now).abs();
           final bDiff = b.plannedStartTime.difference(now).abs();
           return aDiff.compareTo(bDiff);
         });
-        slotIdToStart = unusedSlots.first.id;
+
+        final nearestSlot = unusedSlots.first;
+        final timeUntilSlot = nearestSlot.plannedStartTime.difference(now);
+
+        // Check if the nearest slot is within the proximity threshold.
+        // We use the slot if:
+        // 1. It's in the past (we're late, but close enough)
+        // 2. It starts within 30 minutes from now
+        // Note: For past slots, we check if we're within 30 min AFTER the planned start
+        final isCloseEnough = timeUntilSlot.abs() <= slotProximityThreshold;
+
+        if (isCloseEnough) {
+          // Use the scheduled slot - it's close enough in time
+          slotIdToStart = nearestSlot.id;
+        } else {
+          // Too far from any scheduled slot - create an ad-hoc slot
+          // This preserves the scheduled slots for their intended times
+          final remainingTime = task.remainingMinutes > 0
+              ? task.remainingMinutes
+              : task.estimatedMinutes;
+          final newSlot = TimeSlot(
+            id: _uuid.v4(),
+            plannedStartTime: now,
+            plannedEndTime: now.add(Duration(minutes: remainingTime)),
+          );
+          task.addTimeSlot(newSlot);
+          slotIdToStart = newSlot.id;
+        }
       } else {
         // All slots have been used - create a new one for this session
         final remainingTime = task.remainingMinutes > 0
@@ -709,7 +759,13 @@ class SignalTaskProvider extends ChangeNotifier {
       await _syncSlotToCalendarOnStart(startedTask, startedSlot);
     }
 
-    return slotIdToStart;
+    // Return result with early start info for the UI to handle nudges
+    return {
+      _slotIdKey: slotIdToStart,
+      // Provider doesn't know user's settings; caller should compute this via SettingsProvider.
+      _earlyStartKey: false,
+      _startTimeKey: now,
+    };
   }
 
   /// Stop the timer for a time slot
@@ -1294,7 +1350,10 @@ class SignalTaskProvider extends ChangeNotifier {
       }
 
       // Queue the calendar event creation
-      await SyncService().queueCreateEvent(task: updatedTask, slot: updatedSlots[slotIndex]);
+      await SyncService().queueCreateEvent(
+        task: updatedTask,
+        slot: updatedSlots[slotIndex],
+      );
 
       return true;
     } catch (e) {

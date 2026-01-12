@@ -357,6 +357,44 @@ class StorageService {
     await saveUserSettings(settings.copyWith(dataVersion: version));
   }
 
+  // ============ Simple Key-Value Storage ============
+
+  /// Get a boolean value from settings box
+  bool? getBool(String key) {
+    final value = _settingsBox.get(key);
+    if (value is bool) return value;
+    return null;
+  }
+
+  /// Set a boolean value in settings box
+  Future<void> setBool(String key, bool value) async {
+    await _settingsBox.put(key, value);
+  }
+
+  /// Get an integer value from settings box
+  int? getInt(String key) {
+    final value = _settingsBox.get(key);
+    if (value is int) return value;
+    return null;
+  }
+
+  /// Set an integer value in settings box
+  Future<void> setInt(String key, int value) async {
+    await _settingsBox.put(key, value);
+  }
+
+  /// Get a string value from settings box
+  String? getString(String key) {
+    final value = _settingsBox.get(key);
+    if (value is String) return value;
+    return null;
+  }
+
+  /// Set a string value in settings box
+  Future<void> setString(String key, String value) async {
+    await _settingsBox.put(key, value);
+  }
+
   // ============ Utility Methods ============
 
   /// Normalize date to midnight (removes time component)
