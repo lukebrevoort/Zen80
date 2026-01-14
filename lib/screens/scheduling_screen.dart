@@ -357,6 +357,18 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
 
   /// Show info sheet for external Google Calendar events (read-only)
   void _showExternalEventInfo(GoogleCalendarEvent event) {
+    final calendarProvider = context.read<CalendarProvider>();
+    String calendarName;
+
+    try {
+      final calendar = calendarProvider.calendars.firstWhere(
+        (c) => c.id == event.calendarId,
+      );
+      calendarName = calendar.summary ?? 'Unknown';
+    } catch (_) {
+      calendarName = event.calendarId; // Fallback to ID if not found
+    }
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -382,6 +394,25 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
                     ),
                     child: const Text(
                       'Google Calendar',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      calendarName,
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.black54,

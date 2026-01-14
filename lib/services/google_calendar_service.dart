@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:googleapis/calendar/v3.dart' as gcal;
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
@@ -48,7 +49,7 @@ class GoogleCalendarService {
 
   // State
   bool _isInitialized = false;
-  String? _selectedCalendarId;
+  List<String>? _selectedCalendarId;
 
   /// Initialize the service (call on app start)
   Future<void> initialize() async {
@@ -61,10 +62,15 @@ class GoogleCalendarService {
         await _setupApiClient();
       }
 
-      // Load selected calendar
-      _selectedCalendarId = await _secureStorage.read(
+      // Load selected calendars as JSON string
+      final calendarsJson = await _secureStorage.read(
         key: _selectedCalendarKey,
       );
+      if (calendarsJson != null) {
+        _selectedCalendarId = List<String>.from(jsonDecode(calendarsJson));
+      } else {
+        _selectedCalendarId = null;
+      }
 
       _isInitialized = true;
     } catch (e) {
@@ -94,7 +100,11 @@ class GoogleCalendarService {
   String? get userDisplayName => _currentUser?.displayName;
 
   /// Selected calendar ID (null = primary)
-  String get selectedCalendarId => _selectedCalendarId ?? 'primary';
+  List<String> get selectedCalendarId => _selectedCalendarId ?? ['primary'];
+
+  /// Get the primary calendar for write operations (first in selection list)
+  String get primaryCalendarId =>
+      selectedCalendarId.isNotEmpty ? selectedCalendarId.first : 'primary';
 
   /// Sign in to Google
   Future<bool> signIn() async {
@@ -206,10 +216,37 @@ class GoogleCalendarService {
     await _secureStorage.delete(key: 'google_id_token');
   }
 
-  /// Set the selected calendar
-  Future<void> setSelectedCalendar(String calendarId) async {
-    _selectedCalendarId = calendarId;
-    await _secureStorage.write(key: _selectedCalendarKey, value: calendarId);
+  /// Set the selected calendars (replaces any previous selection)
+  Future<void> setSelectedCalendars(List<String> calendarIds) async {
+    _selectedCalendarId = calendarIds;
+    await _secureStorage.write(
+      key: _selectedCalendarKey,
+      value: jsonEncode(calendarIds),
+    );
+  }
+
+  /// Add a calendar to the selection
+  Future<void> addSelectedCalendar(String calendarId) async {
+    final list = _selectedCalendarId ?? <String>[];
+    if (!list.contains(calendarId)) {
+      list.add(calendarId);
+      await _secureStorage.write(
+        key: _selectedCalendarKey,
+        value: jsonEncode(list),
+      );
+      _selectedCalendarId = List<String>.from(list);
+    }
+  }
+
+  /// Remove a calendar from the selection
+  Future<void> removeSelectedCalendar(String calendarId) async {
+    final list = _selectedCalendarId ?? <String>[];
+    list.remove(calendarId);
+    await _secureStorage.write(
+      key: _selectedCalendarKey,
+      value: jsonEncode(list),
+    );
+    _selectedCalendarId = List<String>.from(list);
   }
 
   // ============ Calendar Operations ============
@@ -235,33 +272,35 @@ class GoogleCalendarService {
 
     final startOfDay = DateTime(date.year, date.month, date.day);
     final endOfDay = startOfDay.add(const Duration(days: 1));
+    final allEvents = <GoogleCalendarEvent>[];
 
-    try {
-      final events = await _calendarApi!.events.list(
-        selectedCalendarId,
-        timeMin: startOfDay.toUtc(),
-        timeMax: endOfDay.toUtc(),
-        singleEvents: true,
-        orderBy: 'startTime',
-      );
+    for (final calendarId in selectedCalendarId) {
+      try {
+        final events = await _calendarApi!.events.list(
+          calendarId,
+          timeMin: startOfDay.toUtc(),
+          timeMax: endOfDay.toUtc(),
+          singleEvents: true,
+          orderBy: 'startTime',
+        );
 
-      final eventList = (events.items ?? [])
-          .map(
-            (e) => GoogleCalendarEvent.fromGoogleEvent(
-              _eventToMap(e),
-              selectedCalendarId,
-            ),
-          )
-          .toList();
-
-      _logDebug(
-        'Loaded ${eventList.length} events for ${date.toIso8601String().split('T')[0]}',
-      );
-      return eventList;
-    } catch (e) {
-      _logDebug('Error fetching events', sensitive: true);
-      return [];
+        allEvents.addAll(
+          (events.items ?? []).map(
+            (e) =>
+                GoogleCalendarEvent.fromGoogleEvent(_eventToMap(e), calendarId),
+          ),
+        );
+      } catch (e) {
+        _logDebug(
+          'Error fetching events for calendar $calendarId',
+          sensitive: true,
+        );
+      }
     }
+    _logDebug(
+      'Loaded ${allEvents.length} events for ${date.toIso8601String().split('T')[0]} from ${selectedCalendarId.length} calendars',
+    );
+    return allEvents;
   }
 
   /// Get events for a date range
@@ -276,27 +315,32 @@ class GoogleCalendarService {
       await refreshToken();
     }
 
-    try {
-      final events = await _calendarApi!.events.list(
-        selectedCalendarId,
-        timeMin: start.toUtc(),
-        timeMax: end.toUtc(),
-        singleEvents: true,
-        orderBy: 'startTime',
-      );
+    final allEvents = <GoogleCalendarEvent>[];
 
-      return (events.items ?? [])
-          .map(
-            (e) => GoogleCalendarEvent.fromGoogleEvent(
-              _eventToMap(e),
-              selectedCalendarId,
-            ),
-          )
-          .toList();
-    } catch (e) {
-      _logDebug('Error fetching events for range', sensitive: true);
-      return [];
+    for (final calendarId in selectedCalendarId) {
+      try {
+        final events = await _calendarApi!.events.list(
+          calendarId,
+          timeMin: start.toUtc(),
+          timeMax: end.toUtc(),
+          singleEvents: true,
+          orderBy: 'startTime',
+        );
+
+        allEvents.addAll(
+          (events.items ?? []).map(
+            (e) =>
+                GoogleCalendarEvent.fromGoogleEvent(_eventToMap(e), calendarId),
+          ),
+        );
+      } catch (e) {
+        _logDebug(
+          'Error fetching events for range on calendar $calendarId',
+          sensitive: true,
+        );
+      }
     }
+    return allEvents;
   }
 
   /// Create a calendar event for a Signal task time slot
@@ -318,7 +362,7 @@ class GoogleCalendarService {
     try {
       final created = await _calendarApi!.events.insert(
         event,
-        selectedCalendarId,
+        primaryCalendarId,
       );
       _logDebug('Created event: ${created.id}');
       return created.id;
@@ -341,7 +385,7 @@ class GoogleCalendarService {
     try {
       // Fetch existing event
       final existing = await _calendarApi!.events.get(
-        selectedCalendarId,
+        primaryCalendarId,
         eventId,
       );
 
@@ -355,7 +399,7 @@ class GoogleCalendarService {
       }
       if (colorId != null) existing.colorId = colorId;
 
-      await _calendarApi!.events.update(existing, selectedCalendarId, eventId);
+      await _calendarApi!.events.update(existing, primaryCalendarId, eventId);
       _logDebug('Updated event: $eventId');
       return true;
     } catch (e) {
@@ -369,7 +413,7 @@ class GoogleCalendarService {
     if (_calendarApi == null) return false;
 
     try {
-      await _calendarApi!.events.delete(selectedCalendarId, eventId);
+      await _calendarApi!.events.delete(primaryCalendarId, eventId);
       _logDebug('Deleted event: $eventId');
       return true;
     } catch (e) {
@@ -388,10 +432,10 @@ class GoogleCalendarService {
     if (_calendarApi == null) return null;
 
     try {
-      final event = await _calendarApi!.events.get(selectedCalendarId, eventId);
+      final event = await _calendarApi!.events.get(primaryCalendarId, eventId);
       return GoogleCalendarEvent.fromGoogleEvent(
         _eventToMap(event),
-        selectedCalendarId,
+        primaryCalendarId,
       );
     } catch (e) {
       _logDebug('Error fetching single event', sensitive: true);
@@ -406,6 +450,7 @@ class GoogleCalendarService {
   ///
   /// IMPORTANT: To get a syncToken, we cannot use orderBy, q, or other incompatible parameters.
   /// See: https://developers.google.com/calendar/api/guides/sync
+  /// Note: Sync operations use the primary (first selected) calendar for syncToken compatibility
   Future<FullSyncResult> performFullSync({
     DateTime? timeMin,
     DateTime? timeMax,
@@ -430,7 +475,7 @@ class GoogleCalendarService {
         // NOTE: Cannot use orderBy with sync - it prevents syncToken from being returned
         // Also cannot use singleEvents:true as it's incompatible with syncToken
         final response = await _calendarApi!.events.list(
-          selectedCalendarId,
+          primaryCalendarId,
           timeMin: timeMin?.toUtc(),
           timeMax: timeMax?.toUtc(),
           maxResults: 250, // Max allowed by API
@@ -444,7 +489,7 @@ class GoogleCalendarService {
             allEvents.add(
               GoogleCalendarEvent.fromGoogleEvent(
                 _eventToMap(event),
-                selectedCalendarId,
+                primaryCalendarId,
               ),
             );
           }
@@ -478,6 +523,7 @@ class GoogleCalendarService {
   /// Perform incremental sync - fetches only changes since the last sync
   /// Uses the syncToken to get only modified/deleted events
   /// Throws SyncTokenExpiredException if the token is invalid (HTTP 410)
+  /// Note: Sync operations use primary (first selected) calendar for syncToken compatibility
   Future<IncrementalSyncResult> performIncrementalSync(String syncToken) async {
     if (_calendarApi == null) {
       throw Exception('Not connected to Google Calendar');
@@ -498,7 +544,7 @@ class GoogleCalendarService {
     try {
       do {
         final response = await _calendarApi!.events.list(
-          selectedCalendarId,
+          primaryCalendarId,
           syncToken: syncToken,
           pageToken: pageToken,
           showDeleted: true, // Important: include deleted events
@@ -516,7 +562,7 @@ class GoogleCalendarService {
             changedEvents.add(
               GoogleCalendarEvent.fromGoogleEvent(
                 _eventToMap(event),
-                selectedCalendarId,
+                primaryCalendarId,
               ),
             );
           }

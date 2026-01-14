@@ -273,7 +273,27 @@ class SignalTaskProvider extends ChangeNotifier {
   }
 
   /// Delete a task
+  /// Also deletes any Google Calendar events associated with the task's time slots
   Future<void> deleteTask(String taskId) async {
+    // Get the task before deleting to access its time slots
+    final task = getTask(taskId);
+
+    // Delete Google Calendar events for all time slots that have them
+    // Note: We only delete Signal-created events (googleCalendarEventId), NOT imported
+    // external events (externalCalendarEventId). Imported events existed before Signal
+    // linked to them, so deleting the task just un-links - it doesn't delete the original.
+    if (task != null && GoogleCalendarService().isConnected) {
+      for (final slot in task.timeSlots) {
+        if (slot.googleCalendarEventId != null) {
+          await SyncService().queueDeleteEvent(
+            taskId: taskId,
+            timeSlotId: slot.id,
+            googleCalendarEventId: slot.googleCalendarEventId!,
+          );
+        }
+      }
+    }
+
     await _storageService.deleteSignalTask(taskId);
     _tasks.removeWhere((t) => t.id == taskId);
 

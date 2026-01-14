@@ -60,7 +60,7 @@ class CalendarProvider extends ChangeNotifier {
   int get pendingSyncCount => _pendingSyncCount;
   bool get isLoading => _isLoading;
   String? get userEmail => _calendarService.userEmail;
-  String get selectedCalendarId => _calendarService.selectedCalendarId;
+  List<String> get selectedCalendarIds => _calendarService.selectedCalendarId;
 
   /// Events that are NOT linked to Signal tasks (external events)
   List<GoogleCalendarEvent> get externalEvents =>
@@ -135,19 +135,45 @@ class CalendarProvider extends ChangeNotifier {
     }
   }
 
-  /// Set the selected calendar
-  Future<void> selectCalendar(String calendarId) async {
-    await _calendarService.setSelectedCalendar(calendarId);
+  /// Set selected calendars (replaces any previous selection)
+  Future<void> setCalendars(List<String> calendarIds) async {
+    await _calendarService.setSelectedCalendars(calendarIds);
     await loadEventsForDate(_selectedDate);
   }
 
-  /// Get the display name for the currently selected calendar
-  String getSelectedCalendarName() {
-    try {
-      final calendar = _calendars.firstWhere((c) => c.id == selectedCalendarId);
-      return calendar.summary ?? 'Primary';
-    } catch (_) {
-      return 'Primary';
+  /// Toggle a calendar in the selection
+  Future<void> toggleCalendar(String calendarId) async {
+    final current = selectedCalendarIds;
+    if (current.contains(calendarId)) {
+      if (current.length > 1) {
+        // Don't allow deselecting the last calendar
+        await _calendarService.removeSelectedCalendar(calendarId);
+      }
+    } else {
+      await _calendarService.addSelectedCalendar(calendarId);
+    }
+    await loadEventsForDate(_selectedDate);
+  }
+
+  /// Get display name(s) for currently selected calendars
+  String getSelectedCalendarNames() {
+    if (selectedCalendarIds.isEmpty) return 'None';
+
+    final names = selectedCalendarIds.map((id) {
+      try {
+        final calendar = _calendars.firstWhere((c) => c.id == id);
+        return calendar.summary ?? 'Unnamed';
+      } catch (_) {
+        return 'Unknown';
+      }
+    }).toList();
+
+    if (names.length == 1) {
+      return names.first;
+    } else if (names.length == 2) {
+      return '${names.first} + 1 more';
+    } else {
+      return '${names.length} calendars';
     }
   }
 

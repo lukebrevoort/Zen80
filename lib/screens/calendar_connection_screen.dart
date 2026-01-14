@@ -299,8 +299,8 @@ class CalendarConnectedWidget extends StatelessWidget {
             ),
             child: const Icon(Icons.calendar_view_day, size: 20),
           ),
-          title: const Text('Selected Calendar'),
-          subtitle: Text(calendarProvider.getSelectedCalendarName()),
+          title: const Text('Selected Calendars'),
+          subtitle: Text(calendarProvider.getSelectedCalendarNames()),
           trailing: Icon(Icons.chevron_right, color: Colors.grey.shade400),
           onTap: () => _showCalendarPicker(context),
         ),
@@ -370,8 +370,6 @@ class CalendarConnectedWidget extends StatelessWidget {
   }
 
   void _showCalendarPicker(BuildContext context) {
-    final calendarProvider = context.read<CalendarProvider>();
-
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.white,
@@ -379,53 +377,54 @@ class CalendarConnectedWidget extends StatelessWidget {
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
       ),
       builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(20),
-                child: Text(
-                  'Select Calendar',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                ),
-              ),
-              const Divider(height: 1),
-              ListView.builder(
-                shrinkWrap: true,
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                itemCount: calendarProvider.calendars.length,
-                itemBuilder: (context, index) {
-                  final calendar = calendarProvider.calendars[index];
-                  final isSelected =
-                      calendar.id == calendarProvider.selectedCalendarId;
-
-                  return ListTile(
-                    leading: Container(
-                      width: 16,
-                      height: 16,
-                      decoration: BoxDecoration(
-                        color: calendar.backgroundColor != null
-                            ? _parseColor(calendar.backgroundColor!)
-                            : Colors.blue,
-                        shape: BoxShape.circle,
-                      ),
+        return Consumer<CalendarProvider>(
+          builder: (context, calendarProvider, child) {
+            return SafeArea(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(20),
+                    child: Text(
+                      'Select Calendars',
+                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                     ),
-                    title: Text(calendar.summary ?? 'Unnamed'),
-                    trailing: isSelected
-                        ? const Icon(Icons.check, color: Colors.black)
-                        : null,
-                    onTap: () {
-                      calendarProvider.selectCalendar(calendar.id!);
-                      Navigator.pop(context);
+                  ),
+                  const Divider(height: 1),
+                  ListView.builder(
+                    shrinkWrap: true,
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    itemCount: calendarProvider.calendars.length,
+                    itemBuilder: (context, index) {
+                      final calendar = calendarProvider.calendars[index];
+                      final isSelected = calendarProvider.selectedCalendarIds
+                          .contains(calendar.id);
+
+                      return CheckboxListTile(
+                        secondary: Container(
+                          width: 16,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: calendar.backgroundColor != null
+                                ? _parseColor(calendar.backgroundColor!)
+                                : Colors.blue,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                        title: Text(calendar.summary ?? 'Unnamed'),
+                        value: isSelected,
+                        onChanged: (value) {
+                          calendarProvider.toggleCalendar(calendar.id!);
+                        },
+                      );
                     },
-                  );
-                },
+                  ),
+                  const SizedBox(height: 16),
+                ],
               ),
-              const SizedBox(height: 16),
-            ],
-          ),
+            );
+          },
         );
       },
     );
