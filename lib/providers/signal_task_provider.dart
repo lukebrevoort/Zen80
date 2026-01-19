@@ -962,7 +962,15 @@ class SignalTaskProvider extends ChangeNotifier {
       }
 
       // Create new calendar event (only for Signal-created slots)
-      await SyncService().queueCreateEvent(task: task, slot: slotForSync);
+      // Pass the first tag's color for proper Google Calendar color mapping
+      final tagColorHex = task.tagIds.isNotEmpty
+          ? _storageService.getTag(task.tagIds.first)?.colorHex
+          : null;
+      await SyncService().queueCreateEvent(
+        task: task,
+        slot: slotForSync,
+        colorHex: tagColorHex,
+      );
     }
   }
 
@@ -1369,10 +1377,14 @@ class SignalTaskProvider extends ChangeNotifier {
         notifyListeners();
       }
 
-      // Queue the calendar event creation
+      // Queue the calendar event creation with proper color mapping
+      final tagColorHex = updatedTask.tagIds.isNotEmpty
+          ? _storageService.getTag(updatedTask.tagIds.first)?.colorHex
+          : null;
       await SyncService().queueCreateEvent(
         task: updatedTask,
         slot: updatedSlots[slotIndex],
+        colorHex: tagColorHex,
       );
 
       return true;
@@ -1420,8 +1432,15 @@ class SignalTaskProvider extends ChangeNotifier {
         // if this method is called multiple times rapidly
         task.timeSlots[i] = slot.copyWith(hasSyncedToCalendar: true);
 
-        // Queue the calendar event creation
-        await SyncService().queueCreateEvent(task: task, slot: slot);
+        // Queue the calendar event creation with proper color mapping
+        final tagColorHex = task.tagIds.isNotEmpty
+            ? _storageService.getTag(task.tagIds.first)?.colorHex
+            : null;
+        await SyncService().queueCreateEvent(
+          task: task,
+          slot: slot,
+          colorHex: tagColorHex,
+        );
         syncedCount++;
       }
 

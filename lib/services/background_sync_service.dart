@@ -28,8 +28,7 @@ enum SyncFrequency {
 
 /// Task name constants for workmanager
 class BackgroundTasks {
-  static const String calendarSync =
-      'com.lukebrevoort.signalNoise.backgroundSync';
+  static const String calendarSync = 'com.lukebrevoort.zen80.backgroundSync';
 }
 
 /// Top-level callback dispatcher for workmanager

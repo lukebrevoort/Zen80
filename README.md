@@ -1,6 +1,6 @@
-# Satellite 🛰️
+# Zen 80 🧘
 
-A Flutter productivity tracking app that helps you achieve **80%+ Signal Ratio** through intentional daily planning and focus management.
+Zen 80 is a Flutter productivity tracking app that helps you achieve **80%+ Signal Ratio** through intentional daily planning and focus management.
 
 ## 🎯 Core Concept
 
@@ -10,7 +10,7 @@ A Flutter productivity tracking app that helps you achieve **80%+ Signal Ratio**
 - **Noise** = Everything else (meetings, emails, admin work, distractions)
 - **Goal** = Achieve 80%+ Signal Ratio by intentionally planning and protecting your focus time
 
-Satellite helps you identify what matters most each day, schedule dedicated time for it, and track whether you're actually spending your time on what you said was important.
+Zen 80 helps you identify what matters most each day, schedule dedicated time for it, and track whether you're actually spending your time on what you said was important.
 
 ## ✨ Features
 
@@ -70,8 +70,8 @@ Satellite helps you identify what matters most each day, schedule dedicated time
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/YOUR_USERNAME/Satellite.git
-   cd Satellite
+   git clone https://github.com/YOUR_USERNAME/zen-80.git
+   cd zen-80
    ```
 
 2. **Install dependencies:**
@@ -292,8 +292,8 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 📞 Support
 
-- **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/Satellite/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/YOUR_USERNAME/Satellite/discussions)
+- **Issues**: [GitHub Issues](https://github.com/YOUR_USERNAME/zen-80/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/YOUR_USERNAME/zen-80/discussions)
 - **Email**: <luke@brevoort.com>
 
 ---

@@ -1,6 +1,7 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 
@@ -309,32 +310,87 @@ class SyncService {
     debugPrint('Updated task $taskId slot $slotId with event ID $eventId');
   }
 
-  /// Convert hex color to Google Calendar color ID
-  String? _hexToGoogleColorId(String? hex) {
-    if (hex == null) return '9'; // Default blue
+  /// Public wrapper for color mapping (used by sync operations and testing)
+  String? hexToGoogleColorId(String? hex) {
+    return _hexToGoogleColorId(hex);
+  }
 
-    // Map common colors to Google's color IDs
-    // This is a simplified mapping - could be expanded
+  /// Convert hex color to Google Calendar color ID
+  ///
+  /// Maps Signal tag colors to Google Calendar event colors (1-11):
+  /// 1=Lavender, 2=Sage, 3=Grape, 4=Flamingo, 5=Banana, 6=Tangerine,
+  /// 7=Peacock, 8=Graphite, 9=Blueberry, 10=Basil, 11=Tomato
+  String? _hexToGoogleColorId(String? hex) {
+    if (hex == null) return '9'; // Default to Blueberry
+
     final normalized = hex.toUpperCase().replaceAll('#', '');
+
+    // Complete mapping for all 18 Tag.colorOptions
     switch (normalized) {
+      // Reds → Tomato (11)
+      case 'EF4444':
+        return '11';
+
+      // Oranges → Tangerine (6)
+      case 'F97316':
+        return '6';
+
+      // Yellows/Ambers → Banana (5)
+      case 'F59E0B':
+      case 'EAB308':
+        return '5';
+
+      // Greens/Limes → Basil (10)
+      case '84CC16':
+      case '22C55E':
+      case '10B981':
+        return '10';
+
+      // Teals/Cyans → Peacock (7)
+      case '14B8A6':
+      case '06B6D4':
+        return '7';
+
+      // Blues/Sky → Blueberry (9)
+      case '0EA5E9':
+      case '3B82F6':
+        return '9';
+
+      // Purples/Indigos → Grape (3)
+      case '6366F1':
+      case '8B5CF6':
+      case 'A855F7':
+        return '3';
+
+      // Pinks/Fuchsias → Flamingo (4)
+      case 'D946EF':
+      case 'EC4899':
+      case 'F43F5E':
+        return '4';
+
+      // Gray/Stone → Graphite (8)
+      case '78716C':
+        return '8';
+
+      // Legacy mappings for backward compatibility
       case '4285F4':
       case '3F51B5':
-        return '9'; // Blue -> Blueberry
+        return '9'; // Blue → Blueberry
       case '34A853':
       case '0B8043':
-        return '10'; // Green -> Basil
+        return '10'; // Green → Basil
       case 'FBBC04':
       case 'F6BF26':
-        return '5'; // Yellow -> Banana
+        return '5'; // Yellow → Banana
       case 'EA4335':
       case 'D50000':
-        return '11'; // Red -> Tomato
+        return '11'; // Red → Tomato
       case '9C27B0':
       case '8E24AA':
-        return '3'; // Purple -> Grape
+        return '3'; // Purple → Grape
       case 'FF5722':
       case 'FF8A65':
-        return '6'; // Orange -> Tangerine
+        return '6'; // Orange → Tangerine
       case '7986CB':
         return '1'; // Lavender
       case '33B679':
@@ -345,8 +401,53 @@ class SyncService {
         return '7'; // Peacock
       case '616161':
         return '8'; // Graphite
+
       default:
-        return '9'; // Default to Blueberry
+        // Fallback: try to find closest match based on RGB values
+        return _findClosestGoogleColor(hex);
+    }
+  }
+
+  /// Find closest Google Calendar color based on RGB proximity
+  String _findClosestGoogleColor(String hex) {
+    try {
+      final color = Color(int.parse('FF${hex.replaceAll('#', '')}', radix: 16));
+
+      // Google Calendar event colors with their RGB values
+      final googleColors = {
+        '1': Color(0xFF7986CB), // Lavender
+        '2': Color(0xFF33B679), // Sage
+        '3': Color(0xFF9C27B0), // Grape
+        '4': Color(0xFFE67C73), // Flamingo
+        '5': Color(0xFFFFD54F), // Banana
+        '6': Color(0xFFFF8A65), // Tangerine
+        '7': Color(0xFF039BE5), // Peacock
+        '8': Color(0xFF616161), // Graphite
+        '9': Color(0xFF4285F4), // Blueberry
+        '10': Color(0xFF0B8043), // Basil
+        '11': Color(0xFFE53935), // Tomato
+      };
+
+      // Find closest color by Euclidean distance in RGB space
+      String closestId = '9'; // Default to Blueberry
+      double closestDistance = double.infinity;
+
+      for (final entry in googleColors.entries) {
+        final distance = sqrt(
+          pow(color.r - entry.value.r, 2) +
+              pow(color.g - entry.value.g, 2) +
+              pow(color.b - entry.value.b, 2),
+        );
+
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestId = entry.key;
+        }
+      }
+
+      return closestId;
+    } catch (e) {
+      return '9'; // Default to Blueberry on error
     }
   }
 

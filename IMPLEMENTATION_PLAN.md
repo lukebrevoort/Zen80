@@ -1035,9 +1035,10 @@ Phase 5 transforms Signal/Noise from a standalone productivity app into an integ
    - Enable Google Calendar API
 
 2. **Configure OAuth Consent Screen**
-   - User Type: External
-   - App name: Signal / Noise
-   - Scopes: `calendar.readonly`, `calendar.events`
+    - User Type: External
+    - App name: Zen 80
+    - Scopes: `calendar.readonly`, `calendar.events`
+
    - Test users: Add your email for development
 
 3. **Create OAuth Credentials**

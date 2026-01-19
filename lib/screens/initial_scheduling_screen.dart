@@ -555,7 +555,7 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
               ],
               const SizedBox(height: 16),
               Text(
-                'This event is read-only in Satellite.',
+                'This event is read-only in Zen 80.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade500,

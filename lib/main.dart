@@ -97,20 +97,19 @@ void main() async {
   await SyncService().initialize();
   await BackgroundSyncService().initialize();
 
-  runApp(SignalNoiseApp(storageService: storageService));
+  runApp(Zen80App(storageService: storageService));
 }
 
-class SignalNoiseApp extends StatefulWidget {
+class Zen80App extends StatefulWidget {
   final StorageService storageService;
 
-  const SignalNoiseApp({super.key, required this.storageService});
+  const Zen80App({super.key, required this.storageService});
 
   @override
-  State<SignalNoiseApp> createState() => _SignalNoiseAppState();
+  State<Zen80App> createState() => _Zen80AppState();
 }
 
-class _SignalNoiseAppState extends State<SignalNoiseApp>
-    with WidgetsBindingObserver {
+class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
   late TaskProvider _taskProvider;
   late TagProvider _tagProvider;
   late SettingsProvider _settingsProvider;
@@ -389,7 +388,7 @@ class _SignalNoiseAppState extends State<SignalNoiseApp>
         ChangeNotifierProvider.value(value: _rolloverProvider),
       ],
       child: MaterialApp(
-        title: 'Signal / Noise',
+        title: 'Zen 80',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           useMaterial3: true,

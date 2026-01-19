@@ -165,7 +165,7 @@ class _HomeScreenState extends State<HomeScreen> {
         title: GestureDetector(
           onTap: _onTitleTap,
           child: const Text(
-            'Signal / Noise',
+            'Zen 80',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
