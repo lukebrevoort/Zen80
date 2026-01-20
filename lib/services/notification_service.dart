@@ -44,6 +44,10 @@ class NotificationService {
   static const int _morningReminderNotificationId = 20;
   static const int _noiseWarningNotificationId = 30;
   static const int _inactivityNotificationId = 40;
+  static const int _productivityNotificationId =
+      50; // For positive reinforcement
+  static const int _smartNudgeNotificationId =
+      55; // For smart nudge notifications
   static const int _taskStartingSoonBaseId = 100; // +taskId.hashCode
   static const int _taskStartPromptBaseId = 200; // +taskId.hashCode
   static const int _taskEndingSoonBaseId = 300; // +taskId.hashCode
@@ -606,6 +610,136 @@ class NotificationService {
       _inactivityNotificationId,
       'Time Check ⏰',
       'You haven\'t logged any time in a while. What are you working on?',
+      details,
+    );
+  }
+
+  // ============================================================
+  // NEW: SMART CENTRALIZED NOTIFICATIONS (Fix for notification bug)
+  // ============================================================
+
+  /// Update notifications when user starts working on a task
+  /// This cancels scheduled notifications for tasks the user isn't working on
+  /// and ensures the active task's notifications are accurate
+  Future<void> onTimerStarted(
+    SignalTask activeTask,
+    TimeSlot activeSlot,
+  ) async {
+    // Mark timer as active so inactivity notifications don't fire
+    markTimerStarted();
+
+    // Update notifications to show accurate time for the actual task being worked on
+    await _rescheduleNotificationsForActiveTask(activeTask, activeSlot);
+
+    // Show positive reinforcement for starting work
+    await _showProductivityNotification(activeTask, activeSlot);
+  }
+
+  /// Update notifications when user stops working on a task
+  /// This can trigger nudge notifications if appropriate
+  Future<void> onTimerStopped(SignalTask task, TimeSlot slot) async {
+    // Mark timer as inactive so inactivity monitoring can resume
+    markTimerStopped();
+
+    // Cancel notifications for this task since timer is stopped
+    await cancelSlotNotifications(slot.id);
+
+    // Check if we should send nudge notifications (user is not doing any Signal task)
+    await _checkForNudgeNotification();
+  }
+
+  /// Cancel scheduled notifications for all inactive tasks
+  /// This should be called from SignalTaskProvider where all tasks are accessible
+  Future<void> cancelNotificationsForInactiveTasks(
+    List<SignalTask> allTasks,
+    String activeTaskId,
+  ) async {
+    for (final task in allTasks) {
+      if (task.id != activeTaskId) {
+        await cancelTaskNotifications(task);
+      }
+    }
+  }
+
+  /// Reschedule notifications to reflect the actual task being worked on
+  Future<void> _rescheduleNotificationsForActiveTask(
+    SignalTask task,
+    TimeSlot slot,
+  ) async {
+    // Cancel any existing notifications for this slot first to avoid duplicates
+    await cancelSlotNotifications(slot.id);
+
+    // Schedule updated notifications showing the actual task
+    // Use a short time before end since we're already in the task
+    await _scheduleSlotNotifications(
+      task: task,
+      slot: slot,
+      minutesBeforeStart: 0, // Task already started
+      minutesBeforeEnd: 5,
+    );
+  }
+
+  /// Show positive reinforcement notification for productive work
+  Future<void> _showProductivityNotification(
+    SignalTask task,
+    TimeSlot slot,
+  ) async {
+    // Calculate total time including current session (not just accumulated)
+    final currentSessionTime = slot.actualStartTime != null && slot.isActive
+        ? DateTime.now().difference(slot.actualStartTime!)
+        : Duration.zero;
+    final totalTime =
+        Duration(seconds: slot.accumulatedSeconds) + currentSessionTime;
+    final elapsedStr = _formatDuration(totalTime);
+
+    const darwinDetails = DarwinNotificationDetails(
+      presentAlert: false, // Don't interrupt - this is positive reinforcement
+      presentBadge: false,
+      presentSound: false,
+      interruptionLevel: InterruptionLevel.passive,
+    );
+
+    const details = NotificationDetails(
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    await _notifications.show(
+      _productivityNotificationId,
+      'Working on ${task.title} 🎯',
+      'Great focus! You\'ve spent $elapsedStr on this task.',
+      details,
+    );
+  }
+
+  /// Check if we should send nudge notifications
+  /// Only sends when user is NOT doing any Signal task
+  /// Leverages the existing inactivity monitoring system
+  Future<void> _checkForNudgeNotification() async {
+    // The inactivity monitoring system handles periodic checks
+    // This method is called specifically when a timer stops
+    // If we've been inactive long enough, show a smart nudge
+    await _checkInactivity();
+  }
+
+  /// Show intelligent nudge notification
+  Future<void> _showSmartNudgeNotification() async {
+    const darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.active,
+    );
+
+    const details = NotificationDetails(
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    await _notifications.show(
+      _smartNudgeNotificationId,
+      'Time to Focus ⏰',
+      'You haven\'t logged any Signal time recently. What\'s the most important thing to work on?',
       details,
     );
   }

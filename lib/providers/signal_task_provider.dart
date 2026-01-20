@@ -18,6 +18,14 @@ class SignalTaskProvider extends ChangeNotifier {
   DateTime? _lastMissedSlotCheck; // Throttle for missed slot cleanup
   DateTime? _lastOvertimeSync; // Throttle for overtime calendar sync
 
+  /// Callback for when a task timer starts
+  /// Can be used to update notifications and track actual work
+  void Function(SignalTask task, TimeSlot slot)? onTimerStart;
+
+  /// Callback for when a task timer stops
+  /// Can be used to manage notification state
+  void Function(SignalTask task, TimeSlot slot)? onTimerStop;
+
   /// Callback for when a task is auto-ended
   /// Can be used to show notifications or update UI
   void Function(SignalTask task, TimeSlot slot)? onAutoEnd;
@@ -583,6 +591,11 @@ class SignalTaskProvider extends ChangeNotifier {
             startedSlot.externalCalendarEventId != null)) {
       await _syncSlotToCalendarOnStart(_activeTask!, startedSlot);
     }
+
+    // Call timer start callback for notification management
+    if (_activeTask != null && startedSlot != null) {
+      onTimerStart?.call(_activeTask!, startedSlot);
+    }
   }
 
   /// Result of a smart start operation, including early start info for nudge display
@@ -653,6 +666,11 @@ class SignalTaskProvider extends ChangeNotifier {
       }
 
       // Resume is never an "early start" - we already started this session earlier
+      // Call timer start callback for notification management
+      if (resumedTask != null && resumedSlot != null) {
+        onTimerStart?.call(resumedTask, resumedSlot);
+      }
+
       return {
         _slotIdKey: lastSlot.id,
         _earlyStartKey: false,
@@ -777,6 +795,11 @@ class SignalTaskProvider extends ChangeNotifier {
         (startedSlot.googleCalendarEventId != null ||
             startedSlot.externalCalendarEventId != null)) {
       await _syncSlotToCalendarOnStart(startedTask, startedSlot);
+    }
+
+    // Call timer start callback for notification management
+    if (startedTask != null && startedSlot != null) {
+      onTimerStart?.call(startedTask, startedSlot);
     }
 
     // Return result with early start info for the UI to handle nudges
@@ -907,6 +930,11 @@ class SignalTaskProvider extends ChangeNotifier {
     // Queue calendar sync ONLY if session met threshold and slot isn't already synced
     if (updatedSlot != null && GoogleCalendarService().isConnected) {
       await _syncSlotToCalendar(task, updatedSlot);
+    }
+
+    // Call timer stop callback for notification management
+    if (updatedSlot != null) {
+      onTimerStop?.call(task, updatedSlot);
     }
   }
 

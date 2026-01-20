@@ -136,6 +136,8 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
     _rolloverProvider = RolloverProvider(widget.storageService);
 
     // Wire up notification callbacks for SignalTaskProvider
+    _signalTaskProvider.onTimerStart = _handleTimerStarted;
+    _signalTaskProvider.onTimerStop = _handleTimerStopped;
     _signalTaskProvider.onAutoEnd = _handleTaskAutoEnded;
     _signalTaskProvider.onTimerReachedEnd = _handleTimerReachedEnd;
 
@@ -163,6 +165,24 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
 
     // Reset golden ratio notification status if it's a new day
     SettingsService().resetGoldenRatioIfNewDay();
+  }
+
+  /// Handle when a timer starts - update notifications for smart centralized system
+  void _handleTimerStarted(SignalTask activeTask, TimeSlot slot) {
+    // Cancel notifications for all inactive tasks first
+    final allTasks = _signalTaskProvider.tasks;
+    NotificationService().cancelNotificationsForInactiveTasks(
+      allTasks,
+      activeTask.id,
+    );
+
+    // Then update notifications for the active task
+    NotificationService().onTimerStarted(activeTask, slot);
+  }
+
+  /// Handle when a timer stops - update notification state
+  void _handleTimerStopped(SignalTask task, TimeSlot slot) {
+    NotificationService().onTimerStopped(task, slot);
   }
 
   /// Handle when a task is auto-ended (timer reached end and autoEnd is enabled)
