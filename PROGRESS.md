@@ -204,3 +204,39 @@
 - Request re-review from @reviewer to verify all critical issues are resolved
 - Consider additional real-world integration testing
 - Merge to main branch after final review approval
+
+## 2026-01-20 02:00 UTC
+### TASKS COMPLETED
+- **Fixed Codex-Identified Issue: Notification Cleanup for Early Session Termination**
+  
+  **Problem Identified:**
+  When a session is discarded or reset for failing the commitment threshold, `stopTimeSlot` returns before reaching the `onTimerStop` callback, leaving `NotificationService.onTimerStopped` never called. This causes:
+  - `_isTimerActive` remains true
+  - `cancelSlotNotifications` is skipped  
+  - Inactivity nudges are suppressed
+  - Stale "ending soon" notifications can fire after short/aborted sessions
+  
+  **Root Cause:**
+  Two early returns in `stopTimeSlot()` at lines 881 and 912 happen BEFORE the `onTimerStop` callback at lines 935-938:
+  1. **Line 881**: Ad-hoc session discarded for failing commitment threshold
+  2. **Line 912**: Pre-scheduled slot reset for failing commitment threshold
+  
+  **Solution Implemented:**
+  Added `onTimerStop?.call(task, slot)` BEFORE both early returns to ensure notification cleanup always runs:
+  
+  ```dart
+  // Clean up notification state BEFORE discarding the session
+  // This ensures _isTimerActive is reset and stale notifications are cancelled
+  onTimerStop?.call(task, slot);
+  ```
+  
+  **Files Modified:**
+  - `lib/providers/signal_task_provider.dart` (+6 lines) - Added notification cleanup before early returns
+  
+  **Testing:**
+  ✅ All 61 signal_task tests passing
+  ✅ All 10 notification_service tests passing
+  ✅ Full Flutter test suite passing (no regressions)
+
+### IN PROGRESS
+- None. All Codex issues have been addressed.

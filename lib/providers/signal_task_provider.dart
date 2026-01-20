@@ -876,6 +876,10 @@ class SignalTaskProvider extends ChangeNotifier {
         _activeTask = null;
       }
 
+      // Clean up notification state BEFORE discarding the session
+      // This ensures _isTimerActive is reset and stale notifications are cancelled
+      onTimerStop?.call(task, slot);
+
       await updateTask(task);
       // No calendar sync for discarded ad-hoc sessions
       return;
@@ -906,6 +910,10 @@ class SignalTaskProvider extends ChangeNotifier {
       if (_activeTask?.id == taskId) {
         _activeTask = null;
       }
+
+      // Clean up notification state BEFORE resetting the session
+      // This ensures _isTimerActive is reset and stale notifications are cancelled
+      onTimerStop?.call(task, slot);
 
       await updateTask(task);
       // No calendar sync needed - event stays as-is with planned times
