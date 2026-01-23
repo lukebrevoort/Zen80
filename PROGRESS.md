@@ -205,6 +205,64 @@
 - Consider additional real-world integration testing
 - Merge to main branch after final review approval
 
+## 2026-01-21 19:30 UTC
+### TASKS COMPLETED
+- **Fixed Critical Bug: Duplicated Block When Continuing Signal**
+  
+  **Problem Identified:**
+  When a user creates a signal with a Google Calendar event, starts the timer, lets it end automatically, then tries to continue the timer, the app creates a new duplicated timeslot instead of extending the existing one. This was marked as Critical priority (Jan 20, 2026).
+  
+  **Root Cause:**
+  The `smartStartTask` method in `signal_task_provider.dart` only allowed resuming slots within the 15-minute merge window (`canMergeSession`). When a user tried to restart a timer after auto-end (and after the merge window expired), the system would create a new ad-hoc slot instead of continuing the existing one with the calendar event.
+  
+  **Solution Implemented:**
+  Modified the resume logic in `smartStartTask` to check if the slot has a calendar event (`googleCalendarEventId` or `externalCalendarEventId`) in addition to the merge window check:
+  
+  ```dart
+  // Before: Only merge within 15-minute window
+  if (lastSlot != null && lastSlot.canMergeSession) { ... }
+  
+  // After: Merge within 15-min OR if slot has calendar event
+  final shouldResumeSlot = lastSlot != null &&
+      (lastSlot.canMergeSession ||
+          (lastSlot.googleCalendarEventId != null ||
+              lastSlot.externalCalendarEventId != null));
+  ```
+  
+  **Files Modified:**
+  - `lib/providers/signal_task_provider.dart` (+9 lines) - Enhanced resume logic
+  
+  **Key Benefits:**
+  1. Slots within the 15-minute merge window continue to merge normally
+  2. Slots with calendar events can be resumed even after the merge window expires
+  3. Existing calendar events are extended rather than creating duplicates
+  4. User workflow with Google Calendar integration remains seamless
+  
+  **Workflow:**
+  1. Pulled open bugs from Notion Projects Database for Zen80 project
+  2. Selected highest priority bug: "Duplicated Block" (Critical, Jan 20)
+  3. Analyzed bug details and reproduction steps
+  4. Created git branch: `fix/duplicated-block-when-continuing-signal`
+  5. Created PR: https://github.com/lukebrevoort/Zen80/pull/2
+  6. Implemented fix and committed changes
+  7. Added progress comments to PR
+  8. Updated Notion task status to "Under Review" with PR link
+  
+  **Notion Update:**
+  ✅ Task "Duplicated Block" status changed from "Open" to "Under Review"
+  ✅ Added PR link: https://github.com/lukebrevoort/Zen80/pull/2
+  
+### IN PROGRESS
+- None. Bug fix implementation complete and ready for review.
+
+### BLOCKERS
+- None.
+
+### NEXT STEPS
+- Await review approval for duplicated block fix
+- Consider additional real-world integration testing with Google Calendar
+- Merge to main branch after final review approval
+
 ## 2026-01-20 02:00 UTC
 ### TASKS COMPLETED
 - **Fixed Codex-Identified Issue: Notification Cleanup for Early Session Termination**

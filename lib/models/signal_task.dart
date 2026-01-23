@@ -310,6 +310,14 @@ class SignalTask extends HiveObject {
     final bool isFirstStart = slot.sessionStartTime == null;
     final bool isResumingWithinSession = !isFirstStart && slot.canMergeSession;
 
+    // Allow resuming after merge window if slot has a calendar event.
+    // This prevents creating duplicate calendar events when continuing
+    // a signal that had an associated Google Calendar event.
+    final bool canResumeCalendarSlot =
+        !isFirstStart &&
+        (slot.googleCalendarEventId != null ||
+            slot.externalCalendarEventId != null);
+
     if (isFirstStart) {
       // First time starting this slot - set session start time
       timeSlots[slotIndex] = slot.copyWith(
@@ -328,8 +336,17 @@ class SignalTask extends HiveObject {
         isActive: true,
         // sessionStartTime stays the same - for calendar event spanning
       );
+    } else if (canResumeCalendarSlot) {
+      // Resuming after merge window but slot has calendar event - allow resume
+      // to extend existing calendar event instead of creating duplicate
+      timeSlots[slotIndex] = slot.copyWith(
+        actualStartTime: now,
+        clearActualEndTime: true,
+        isActive: true,
+        // sessionStartTime stays the same - for calendar event spanning
+      );
     } else {
-      // Gap >= 15 min - provider should create a NEW slot instead.
+      // Gap >= 15 min and no calendar event - provider should create a NEW slot instead.
       // We do not mutate accumulatedSeconds here, to avoid corrupting work history.
       throw StateError(
         'Cannot resume slot after session merge threshold; create a new slot instead.',
