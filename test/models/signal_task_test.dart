@@ -3,6 +3,29 @@ import 'package:signal_noise/models/signal_task.dart';
 import 'package:signal_noise/models/time_slot.dart';
 import 'package:signal_noise/models/sub_task.dart';
 
+class _TestSignalTask extends SignalTask {
+  _TestSignalTask({
+    required super.id,
+    required super.title,
+    required super.estimatedMinutes,
+    required super.scheduledDate,
+    required super.createdAt,
+    super.tagIds,
+    super.subTasks,
+    super.status,
+    super.timeSlots,
+    super.googleCalendarEventId,
+    super.isComplete,
+    super.rolledFromTaskId,
+    super.remainingMinutesFromRollover,
+  });
+
+  @override
+  Future<void> save() async {
+    // Tests treat models as pure data; no Hive box.
+  }
+}
+
 void main() {
   group('SignalTask Model', () {
     late DateTime today;
@@ -23,7 +46,7 @@ void main() {
       TaskStatus status = TaskStatus.notStarted,
       bool isComplete = false,
     }) {
-      return SignalTask(
+      return _TestSignalTask(
         id: id,
         title: title,
         estimatedMinutes: estimatedMinutes,
@@ -499,6 +522,60 @@ void main() {
 
         expect(task.shouldCreateNewSlotOnResume, isFalse);
       });
+
+      test(
+        'startTimeSlot throws when resuming after merge window even if calendar-linked',
+        () {
+          final task = createTestTask(
+            timeSlots: [
+              TimeSlot(
+                id: 'slot-1',
+                plannedStartTime: DateTime(2026, 1, 5, 9, 0),
+                plannedEndTime: DateTime(2026, 1, 5, 10, 0),
+                sessionStartTime: DateTime(2026, 1, 5, 9, 0),
+                lastStopTime: DateTime.now().subtract(
+                  const Duration(minutes: 20),
+                ),
+                externalCalendarEventId: 'external-123',
+                isActive: false,
+              ),
+            ],
+          );
+
+          expect(
+            () => task.startTimeSlot('slot-1'),
+            throwsA(isA<StateError>()),
+          );
+        },
+      );
+
+      test(
+        'startTimeSlot resumes within merge window and preserves sessionStartTime',
+        () {
+          final initialSessionStartTime = DateTime(2026, 1, 5, 9, 0);
+          final task = createTestTask(
+            timeSlots: [
+              TimeSlot(
+                id: 'slot-1',
+                plannedStartTime: DateTime(2026, 1, 5, 9, 0),
+                plannedEndTime: DateTime(2026, 1, 5, 10, 0),
+                sessionStartTime: initialSessionStartTime,
+                lastStopTime: DateTime.now().subtract(
+                  const Duration(minutes: 10),
+                ),
+                externalCalendarEventId: 'external-123',
+                isActive: false,
+              ),
+            ],
+          );
+
+          task.startTimeSlot('slot-1');
+
+          final slot = task.timeSlots.first;
+          expect(slot.isActive, isTrue);
+          expect(slot.sessionStartTime, equals(initialSessionStartTime));
+        },
+      );
     });
 
     group('Formatted Output', () {

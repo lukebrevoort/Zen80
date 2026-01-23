@@ -622,20 +622,17 @@ class SignalTaskProvider extends ChangeNotifier {
 
     final now = DateTime.now();
 
-    // Check if we should resume an existing slot (gap < 15 min OR has calendar event)
+    // Check if we should resume an existing slot (gap < 15 min)
     final lastSlot = task.lastStoppedSlot;
 
-    // Priority 1: Resume if gap < 15 minutes (normal merge behavior)
-    // Priority 2: Resume if slot has a calendar event (Signal-created or imported)
-    // This ensures we extend existing calendar events rather than creating duplicates
-    final shouldResumeSlot =
-        lastSlot != null &&
-        (lastSlot.canMergeSession ||
-            (lastSlot.googleCalendarEventId != null ||
-                lastSlot.externalCalendarEventId != null));
+    // Only resume if gap < 15 minutes (normal merge behavior).
+    // IMPORTANT: Do not resume solely because a slot is calendar-linked.
+    // If we do, distinct calendar events mapped to the same Signal can collapse
+    // into one long visual block spanning across large gaps.
+    final shouldResumeSlot = lastSlot != null && lastSlot.canMergeSession;
 
     if (shouldResumeSlot) {
-      // Gap is less than 15 minutes OR slot has calendar event - resume the existing slot
+      // Gap is less than 15 minutes - resume the existing slot
 
       // IMPORTANT: If the slot's plannedEndTime is in the past, extend it
       // to prevent the auto-end checker from immediately stopping the timer.

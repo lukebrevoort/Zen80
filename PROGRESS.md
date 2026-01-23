@@ -1,4 +1,86 @@
+## 2026-01-23 21:01 UTC
+### TASKS COMPLETED
+- Bumped app version to `2.0.1+2` in `pubspec.yaml` and aligned iOS build settings so the widget extension version matches the parent app.
+- Generated a fresh TestFlight IPA at `build/TestFlight/Zen 80.ipa`.
+### IN PROGRESS
+- TestFlight upload (requires App Store Connect credentials via Xcode Organizer/Transporter).
+### BLOCKERS
+- The automated export step was failing because Xcode invoked `rsync` via `PATH` and picked up Homebrew rsync (3.4.1), which doesn’t support the `--extended-attributes` option used by Xcode’s packaging pipeline. For export we forced `PATH=/usr/bin:...` so it uses the system rsync.
+### NEXT STEPS
+- Upload `build/TestFlight/Zen 80.ipa` to App Store Connect (Transporter or Xcode Organizer) and wait for processing, then install from TestFlight.
+
+## 2026-01-23 18:46 UTC
+### TASKS COMPLETED
+- Fixed calendar-linked sessions incorrectly merging across large gaps by enforcing the 15-minute merge threshold in `smartStartTask`.
+- Removed the model-level exception that allowed resuming calendar-linked slots after the merge window, which could produce a single long block spanning multiple distinct calendar events.
+- Added regression tests to ensure `startTimeSlot` throws when attempting to resume after the merge window (even if external-calendar-linked) and still resumes correctly within the window.
+### IN PROGRESS
+- None.
+### BLOCKERS
+- None.
+### NEXT STEPS
+- Run `flutter test` and verify the new tests pass.
+- Manual repro: map two external GCal events ~1 hour apart to the same Signal, start each at their times, and confirm they render as two distinct blocks (not one spanning block).
+
+## 2026-01-22 22:31 UTC
+### TASKS COMPLETED
+- Disabled iPad multitasking and aligned iPad orientations to portrait-only in the app plist to satisfy TestFlight validation requirements.
+- Flattened all iOS app icon PNGs to remove alpha and avoid invalid icon errors during upload.
+- Re-archived the Release build and exported a fresh TestFlight IPA using the updated app-store-connect export method.
+### IN PROGRESS
+- None.
+### BLOCKERS
+- None.
+### NEXT STEPS
+- Upload `build/TestFlight/Zen 80.ipa` via Xcode Organizer or Transporter to activate the TestFlight build.
+
+## 2026-01-22 22:18 UTC
+### TASKS COMPLETED
+- Fixed the widget extension bundle identifier to match the new Zen80 app ID so the archive can validate (`com.lukebrevoort.zen80.SignalNoiseWidget`).
+- Created `ios/ExportOptions.plist`, archived the Release build, and exported a TestFlight-ready IPA to `build/TestFlight`.
+### IN PROGRESS
+- None.
+### BLOCKERS
+- None.
+### NEXT STEPS
+- Upload the exported IPA to App Store Connect (Transporter or Xcode Organizer) and create the TestFlight build entry.
+
+## 2026-01-22 22:12 UTC
+### TASKS COMPLETED
+- Built the Runner scheme for Luke’s iPhone using the new team ID and confirmed successful device build.
+- Installed the Debug build on the device and launched the app (bundle com.lukebrevoort.zen80).
+### IN PROGRESS
+- None.
+### BLOCKERS
+- None.
+### NEXT STEPS
+- Prepare a Release archive suitable for TestFlight upload.
+- If needed, switch signing to distribution cert/profile and validate export settings.
+
+## 2026-01-22 21:05 UTC
+### TASKS COMPLETED
+- Inspected the iOS workspace and device list, confirmed the Runner scheme, and verified current signing settings (team Q5T8FJNX57, bundle ID com.lukebrevoort.zen80).
+- Attempted a device build with Xcode MCP to surface build issues; build timed out before error output returned.
+### IN PROGRESS
+- Resolving device build failures for iPhone deployment and preparing TestFlight-ready release build.
+### BLOCKERS
+- Need confirmation of the correct Apple Developer Team ID and signing identity for the new account before adjusting project signing.
+### NEXT STEPS
+- Confirm the signing team, then retry device build and capture any errors for fixes.
+
 ## 2026-01-14 12:00 UTC
+## 2026-01-22 20:10 UTC
+### TASKS COMPLETED
+- Crafted a `launch_logo.png` asset rendered with Newsreader SemiBold/Bold so the launch screen text matches the logo’s large black serif treatment with just a touch of greenery.
+- Updated `ios/Runner/Base.lproj/LaunchScreen.storyboard` to center the new asset, keeping the palette high-contrast white/black with the green accent from the graphic.
+- Registered Newsreader weights in `pubspec.yaml` so Flutter code has the same font family available elsewhere and added the asset catalog entry so the launch image is packaged.
+### IN PROGRESS
+- None.
+### BLOCKERS
+- None.
+### NEXT STEPS
+- Validate the refreshed launch screen on an iOS simulator/device to confirm the new graphic renders crisply across scales.
+
 ## 2026-01-15 18:48 UTC
 ### TASKS COMPLETED
 - Updated app text, config, and docs so the experience now identifies as Zen 80 across iOS, Android, and supporting asset pipelines.
