@@ -15,6 +15,7 @@ import '../providers/settings_provider.dart';
 import '../providers/calendar_provider.dart';
 import '../services/notification_service.dart';
 import '../widgets/common/blinking_dot.dart';
+import '../widgets/scheduling/split_schedule_dialog.dart';
 
 /// Wrapper to represent either a SignalTask or an external GoogleCalendarEvent
 /// This allows us to display both types in the same calendar view
@@ -202,16 +203,61 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
   }
 
   Future<void> _scheduleTaskAt(SignalTask task, DateTime startTime) async {
-    final provider = context.read<SignalTaskProvider>();
-    final settingsProvider = context.read<SettingsProvider>();
-
     // Round to nearest 15 minutes
     final roundedStart = _roundToNearestQuarterHour(startTime);
-    final endTime = roundedStart.add(Duration(minutes: task.estimatedMinutes));
+
+    // If task has remaining unscheduled time, show split dialog
+    if (task.unscheduledMinutes > 0) {
+      final duration = await _showSplitScheduleDialog(task, roundedStart);
+      if (duration == null) return; // User cancelled
+
+      await _createTimeSlot(task, roundedStart, duration);
+      return;
+    }
+
+    await _createTimeSlot(
+      task,
+      roundedStart,
+      Duration(minutes: task.estimatedMinutes),
+    );
+  }
+
+  Future<Duration?> _showSplitScheduleDialog(
+    SignalTask task,
+    DateTime dropTime,
+  ) async {
+    return showModalBottomSheet<Duration>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(
+          bottom: MediaQuery.of(context).viewInsets.bottom,
+        ),
+        child: SplitScheduleDialog(
+          task: task,
+          dropTime: dropTime,
+          onCancel: () => Navigator.pop(context),
+          onSchedule: (duration) => Navigator.pop(context, duration),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createTimeSlot(
+    SignalTask task,
+    DateTime startTime,
+    Duration duration,
+  ) async {
+    final provider = context.read<SignalTaskProvider>();
+    final settingsProvider = context.read<SettingsProvider>();
+    final endTime = startTime.add(duration);
 
     final slot = TimeSlot(
       id: _uuid.v4(),
-      plannedStartTime: roundedStart,
+      plannedStartTime: startTime,
       plannedEndTime: endTime,
       linkedSubTaskIds: [],
     );
