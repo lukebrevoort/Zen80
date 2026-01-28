@@ -1,15 +1,3 @@
-## 2026-01-28 12:00 UTC
-### TASKS COMPLETED
-- Fixed Google Calendar event marking to use the event's calendarId so secondary calendars are updated correctly.
-- Updated mark-as-signal calls in scheduling screens and provider to pass through calendarId.
-### IN PROGRESS
-- None.
-### BLOCKERS
-- None.
-### NEXT STEPS
-- QA: import an external event from a non-primary calendar and confirm it recolors after adding to Signal.
-- QA: verify primary calendar behavior still marks events as Signal.
-
 ## 2026-01-27 18:45 UTC
 ### TASKS COMPLETED
 - Improved tag selector accessibility by expanding dropdown height and padding for keyboard visibility.
