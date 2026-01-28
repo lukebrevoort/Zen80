@@ -98,7 +98,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
     // Fallback: derive the earliest actual start today if no override exists.
     // This prevents ratios from snapping to 0 before focus start after an early session ends.
-    final scheduleStart = schedule.getStartTimeForDate(now);
+    final nowMinutes = now.hour * 60 + now.minute;
+    final scheduleStartMinutes =
+        schedule.activeStartHour * 60 + schedule.activeStartMinute;
+    final scheduleEndMinutes =
+        schedule.activeEndHour * 60 + schedule.activeEndMinute;
+
+    final scheduleStart =
+        schedule.crossesMidnight &&
+            nowMinutes < scheduleEndMinutes &&
+            nowMinutes < scheduleStartMinutes
+        ? schedule.getStartTimeForDate(now.subtract(const Duration(days: 1)))
+        : schedule.getStartTimeForDate(now);
     DateTime? earliestActualStart;
     for (final task in taskProvider.tasks) {
       for (final slot in task.timeSlots) {
