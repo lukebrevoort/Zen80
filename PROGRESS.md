@@ -1,3 +1,16 @@
+## 2026-01-27 10:00 UTC
+### TASKS COMPLETED
+- Added an Add to Signal flow for external Google Calendar events in the initial scheduling screen, including create-new-task and add-to-existing-task options.
+- Updated the external event detail sheet to show the calendar name and Add to Signal action.
+- Refreshes the calendar and marks external events as Signal after import.
+### IN PROGRESS
+- None.
+### BLOCKERS
+- None.
+### NEXT STEPS
+- QA: tap a Google Calendar event on the initial scheduling screen and verify both Add to Signal flows.
+- Review PR #3.
+
 ## 2026-01-23 21:01 UTC
 ### TASKS COMPLETED
 - Bumped app version to `2.0.1+2` in `pubspec.yaml` and aligned iOS build settings so the widget extension version matches the parent app.
