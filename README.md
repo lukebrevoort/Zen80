@@ -107,6 +107,24 @@ Zen 80 helps you identify what matters most each day, schedule dedicated time fo
    flutter run -d macos
    ```
 
+### iOS Archive (Xcode)
+
+Use the helper script to ensure Flutter configs and Pods are generated before archiving:
+
+```bash
+./scripts/xcodebuild_archive.sh
+```
+
+To enable code signing, set the signing variables before running the script:
+
+```bash
+CODE_SIGNING_ALLOWED=YES \
+CODE_SIGNING_REQUIRED=YES \
+CODE_SIGN_IDENTITY="Apple Development" \
+DEVELOPMENT_TEAM=Q5T8FJNX57 \
+./scripts/xcodebuild_archive.sh
+```
+
 ## 🏗️ Architecture
 
 ### Tech Stack
