@@ -495,8 +495,20 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
     }
   }
 
-  /// Basic info sheet for external Google Calendar events (read-only)
+  /// Show info sheet for external Google Calendar events
   void _showExternalEventInfo(GoogleCalendarEvent event) {
+    final calendarProvider = context.read<CalendarProvider>();
+    String calendarName;
+
+    try {
+      final calendar = calendarProvider.calendars.firstWhere(
+        (c) => c.id == event.calendarId,
+      );
+      calendarName = calendar.summary ?? 'Unknown';
+    } catch (_) {
+      calendarName = event.calendarId;
+    }
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -509,20 +521,46 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: Colors.grey.shade200,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'Google Calendar',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w500,
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: const Text(
+                      'Google Calendar',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade200,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      calendarName,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 12),
               Text(
@@ -553,13 +591,436 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _showMarkAsSignalOptions(event);
+                  },
+                  icon: const Icon(Icons.star_outline),
+                  label: const Text('Add to Signal'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
               Text(
-                'This event is read-only in Zen 80.',
+                'Add this event as a Signal task or link to an existing task.',
                 style: TextStyle(
                   fontSize: 12,
                   color: Colors.grey.shade500,
                   fontStyle: FontStyle.italic,
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Create a NEW Signal task from an external Google Calendar event
+  Future<void> _createNewTaskFromExternalEvent(
+    GoogleCalendarEvent event,
+  ) async {
+    final taskProvider = context.read<SignalTaskProvider>();
+    final calendarProvider = context.read<CalendarProvider>();
+
+    final durationMinutes = event.duration.inMinutes;
+
+    final eventDate = DateTime(
+      event.startTime.year,
+      event.startTime.month,
+      event.startTime.day,
+    );
+
+    final task = SignalTask(
+      id: const Uuid().v4(),
+      title: event.title,
+      estimatedMinutes: durationMinutes,
+      tagIds: [],
+      subTasks: [],
+      status: TaskStatus.notStarted,
+      scheduledDate: eventDate,
+      timeSlots: [
+        TimeSlot(
+          id: const Uuid().v4(),
+          plannedStartTime: event.startTime,
+          plannedEndTime: event.endTime,
+          autoEnd: true,
+          linkedSubTaskIds: [],
+          externalCalendarEventId: event.id,
+        ),
+      ],
+      isComplete: false,
+      createdAt: DateTime.now(),
+    );
+
+    await taskProvider.addSignalTask(task);
+
+    await calendarProvider.markEventAsSignal(event.id);
+
+    await _syncAllEventsToCalendar();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${event.title}" added as a new Signal task'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green.shade600,
+        ),
+      );
+    }
+  }
+
+  /// Add an external Google Calendar event to an EXISTING Signal task
+  Future<void> _addExternalEventToExistingTask(
+    GoogleCalendarEvent event,
+    SignalTask task,
+  ) async {
+    final taskProvider = context.read<SignalTaskProvider>();
+    final calendarProvider = context.read<CalendarProvider>();
+
+    final slot = TimeSlot(
+      id: const Uuid().v4(),
+      plannedStartTime: event.startTime,
+      plannedEndTime: event.endTime,
+      autoEnd: true,
+      linkedSubTaskIds: [],
+      externalCalendarEventId: event.id,
+    );
+
+    await taskProvider.addTimeSlotToTask(task.id, slot);
+
+    await calendarProvider.markEventAsSignal(event.id);
+
+    await _syncAllEventsToCalendar();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Added time slot to "${task.title}"'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.green.shade600,
+        ),
+      );
+    }
+  }
+
+  /// Show options for how to add an external event to Signal
+  void _showMarkAsSignalOptions(GoogleCalendarEvent event) {
+    final taskProvider = context.read<SignalTaskProvider>();
+
+    final eventDate = DateTime(
+      event.startTime.year,
+      event.startTime.month,
+      event.startTime.day,
+    );
+    final tasksForDate = taskProvider.getTasksForDate(eventDate);
+
+    final alreadyImported = _isEventAlreadyImported(event.id);
+
+    if (alreadyImported) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('"${event.title}" has already been added to Signal'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: Colors.orange.shade600,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (context) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Add to Signal',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'How would you like to add "${event.title}"?',
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 20),
+              _buildOptionTile(
+                icon: Icons.add_circle_outline,
+                title: 'Create new Signal task',
+                subtitle: 'Make a new task titled "${event.title}"',
+                onTap: () {
+                  Navigator.pop(context);
+                  _createNewTaskFromExternalEvent(event);
+                },
+              ),
+              const SizedBox(height: 12),
+              if (tasksForDate.isNotEmpty) ...[
+                _buildOptionTile(
+                  icon: Icons.playlist_add,
+                  title: 'Add to existing task',
+                  subtitle:
+                      '${tasksForDate.length} task${tasksForDate.length > 1 ? 's' : ''} on this day',
+                  onTap: () {
+                    Navigator.pop(context);
+                    _showExistingTaskSelection(event, tasksForDate);
+                  },
+                ),
+              ] else ...[
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade100,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.grey.shade500,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'No existing tasks on this day to add to',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// Build an option tile for the Mark as Signal options sheet
+  Widget _buildOptionTile({
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.grey.shade300),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.black.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, size: 24),
+            ),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.chevron_right, color: Colors.grey.shade400),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// Show list of existing tasks to add the external event to
+  void _showExistingTaskSelection(
+    GoogleCalendarEvent event,
+    List<SignalTask> tasks,
+  ) {
+    final tagProvider = context.read<TagProvider>();
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      isScrollControlled: true,
+      builder: (context) => DraggableScrollableSheet(
+        initialChildSize: 0.5,
+        minChildSize: 0.3,
+        maxChildSize: 0.8,
+        expand: false,
+        builder: (context, scrollController) => SafeArea(
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Select a task',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Add "${event.title}" time slot to:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Colors.grey.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: tasks.length,
+                  separatorBuilder: (context, index) =>
+                      const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final task = tasks[index];
+                    final tags = tagProvider.getTagsByIds(task.tagIds);
+
+                    return InkWell(
+                      onTap: () {
+                        Navigator.pop(context);
+                        _addExternalEventToExistingTask(event, task);
+                      },
+                      borderRadius: BorderRadius.circular(12),
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Row(
+                          children: [
+                            Container(
+                              width: 24,
+                              height: 24,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: task.isComplete
+                                      ? Colors.green
+                                      : Colors.grey.shade400,
+                                  width: 2,
+                                ),
+                                color: task.isComplete
+                                    ? Colors.green
+                                    : Colors.transparent,
+                              ),
+                              child: task.isComplete
+                                  ? const Icon(
+                                      Icons.check,
+                                      size: 16,
+                                      color: Colors.white,
+                                    )
+                                  : null,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    task.title,
+                                    style: const TextStyle(
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.timer_outlined,
+                                        size: 14,
+                                        color: Colors.grey.shade500,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        task.formattedEstimatedTime,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Colors.grey.shade600,
+                                        ),
+                                      ),
+                                      if (tags.isNotEmpty) ...[
+                                        const SizedBox(width: 12),
+                                        ...tags
+                                            .take(2)
+                                            .map(
+                                              (tag) => Container(
+                                                width: 8,
+                                                height: 8,
+                                                margin: const EdgeInsets.only(
+                                                  right: 4,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: tag.color,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                              ),
+                                            ),
+                                      ],
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ),
             ],
