@@ -667,7 +667,10 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
 
     await taskProvider.addSignalTask(task);
 
-    await calendarProvider.markEventAsSignal(event.id);
+    await calendarProvider.markEventAsSignal(
+      event.id,
+      calendarId: event.calendarId,
+    );
 
     await _syncAllEventsToCalendar();
 
@@ -701,7 +704,10 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
 
     await taskProvider.addTimeSlotToTask(task.id, slot);
 
-    await calendarProvider.markEventAsSignal(event.id);
+    await calendarProvider.markEventAsSignal(
+      event.id,
+      calendarId: event.calendarId,
+    );
 
     await _syncAllEventsToCalendar();
 

@@ -379,13 +379,15 @@ class GoogleCalendarService {
     DateTime? startTime,
     DateTime? endTime,
     String? colorId,
+    String? calendarId,
   }) async {
     if (_calendarApi == null) return false;
 
     try {
+      final targetCalendarId = calendarId ?? primaryCalendarId;
       // Fetch existing event
       final existing = await _calendarApi!.events.get(
-        primaryCalendarId,
+        targetCalendarId,
         eventId,
       );
 
@@ -399,7 +401,7 @@ class GoogleCalendarService {
       }
       if (colorId != null) existing.colorId = colorId;
 
-      await _calendarApi!.events.update(existing, primaryCalendarId, eventId);
+      await _calendarApi!.events.update(existing, targetCalendarId, eventId);
       _logDebug('Updated event: $eventId');
       return true;
     } catch (e) {
@@ -423,8 +425,12 @@ class GoogleCalendarService {
   }
 
   /// Mark an existing Google Calendar event as Signal (update its color)
-  Future<bool> markEventAsSignal(String eventId) async {
-    return updateEvent(eventId: eventId, colorId: '9'); // Blueberry = Signal
+  Future<bool> markEventAsSignal(String eventId, {String? calendarId}) async {
+    return updateEvent(
+      eventId: eventId,
+      colorId: '9',
+      calendarId: calendarId,
+    ); // Blueberry = Signal
   }
 
   /// Get a single event by ID

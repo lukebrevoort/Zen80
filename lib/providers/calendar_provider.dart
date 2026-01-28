@@ -220,11 +220,14 @@ class CalendarProvider extends ChangeNotifier {
   }
 
   /// Mark a Google Calendar event as a Signal task
-  Future<bool> markEventAsSignal(String eventId) async {
+  Future<bool> markEventAsSignal(String eventId, {String? calendarId}) async {
     if (!isConnected) return false;
 
     try {
-      final success = await _calendarService.markEventAsSignal(eventId);
+      final success = await _calendarService.markEventAsSignal(
+        eventId,
+        calendarId: calendarId,
+      );
       if (success) {
         await refresh();
       }

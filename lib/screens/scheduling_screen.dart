@@ -878,7 +878,10 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
     await taskProvider.addSignalTask(task);
 
     // Mark the event as Signal in Google Calendar (change color)
-    await calendarProvider.markEventAsSignal(event.id);
+    await calendarProvider.markEventAsSignal(
+      event.id,
+      calendarId: event.calendarId,
+    );
 
     // Refresh the calendar view (clear + re-add to avoid duplicates)
     await _syncAllEventsToCalendar();
@@ -933,7 +936,10 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
     //           unscheduledMinutes becomes 120 (remaining time to schedule)
 
     // Mark the event as Signal in Google Calendar (change color)
-    await calendarProvider.markEventAsSignal(event.id);
+    await calendarProvider.markEventAsSignal(
+      event.id,
+      calendarId: event.calendarId,
+    );
 
     // Refresh the calendar view (clear + re-add to avoid duplicates)
     await _syncAllEventsToCalendar();
