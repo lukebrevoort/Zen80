@@ -278,23 +278,17 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
         debugPrint('Failed to sync slot to calendar: \$e');
       }
 
-      // Schedule notifications for this new slot
+      // Refresh notifications after adding a slot
       try {
-        if (settingsProvider.enableStartReminders ||
-            settingsProvider.enableEndReminders) {
-          await NotificationService().scheduleSlotNotifications(
-            task: updatedTask,
-            slot: addedSlot,
-            minutesBeforeStart: settingsProvider.enableStartReminders
-                ? settingsProvider.notificationBeforeStartMinutes
-                : 0,
-            minutesBeforeEnd: settingsProvider.enableEndReminders
-                ? settingsProvider.notificationBeforeEndMinutes
-                : 0,
-          );
-        }
+        await NotificationService().refreshTaskNotifications(
+          tasks: provider.tasks,
+          enableStartReminders: settingsProvider.enableStartReminders,
+          enableEndReminders: settingsProvider.enableEndReminders,
+          minutesBeforeStart: settingsProvider.notificationBeforeStartMinutes,
+          minutesBeforeEnd: settingsProvider.notificationBeforeEndMinutes,
+        );
       } catch (e) {
-        debugPrint('Failed to schedule notifications for slot: $e');
+        debugPrint('Failed to refresh notifications for slot: $e');
       }
     }
 
@@ -1189,21 +1183,15 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
 
     // Schedule new notifications for the updated slot
     try {
-      if (settingsProvider.enableStartReminders ||
-          settingsProvider.enableEndReminders) {
-        await NotificationService().scheduleSlotNotifications(
-          task: task,
-          slot: updatedSlot,
-          minutesBeforeStart: settingsProvider.enableStartReminders
-              ? settingsProvider.notificationBeforeStartMinutes
-              : 0,
-          minutesBeforeEnd: settingsProvider.enableEndReminders
-              ? settingsProvider.notificationBeforeEndMinutes
-              : 0,
-        );
-      }
+      await NotificationService().refreshTaskNotifications(
+        tasks: provider.tasks,
+        enableStartReminders: settingsProvider.enableStartReminders,
+        enableEndReminders: settingsProvider.enableEndReminders,
+        minutesBeforeStart: settingsProvider.notificationBeforeStartMinutes,
+        minutesBeforeEnd: settingsProvider.notificationBeforeEndMinutes,
+      );
     } catch (e) {
-      debugPrint('Failed to schedule notifications: \$e');
+      debugPrint('Failed to refresh notifications: \$e');
     }
 
     _addSignalTaskToCalendar(task, updatedSlot);

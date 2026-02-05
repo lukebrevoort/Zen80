@@ -139,6 +139,7 @@ class NotificationService {
     int minutesBeforeStart = 5,
     int minutesBeforeEnd = 5,
   }) async {
+    if (_isTimerActive) return;
     for (final slot in task.timeSlots) {
       if (slot.isDiscarded || slot.isCompleted) continue;
 
@@ -160,6 +161,7 @@ class NotificationService {
     int minutesBeforeStart = 5,
     int minutesBeforeEnd = 5,
   }) async {
+    if (_isTimerActive) return;
     if (slot.isDiscarded || slot.isCompleted) return;
 
     await _scheduleSlotNotifications(
@@ -183,43 +185,47 @@ class NotificationService {
     final slotIdHash = slot.id.hashCode.abs() % 10000;
 
     // 1. Task Starting Soon (X min before planned start)
-    final startingSoonTime = slot.plannedStartTime.subtract(
-      Duration(minutes: minutesBeforeStart),
-    );
-    if (startingSoonTime.isAfter(now)) {
-      await _scheduleNotification(
-        id: _taskStartingSoonBaseId + slotIdHash,
-        title: '${task.title} starts soon',
-        body: 'Starting in $minutesBeforeStart minutes. Ready to focus?',
-        scheduledTime: startingSoonTime,
-        category: 'taskStart',
+    if (minutesBeforeStart > 0) {
+      final startingSoonTime = slot.plannedStartTime.subtract(
+        Duration(minutes: minutesBeforeStart),
       );
-    }
+      if (startingSoonTime.isAfter(now)) {
+        await _scheduleNotification(
+          id: _taskStartingSoonBaseId + slotIdHash,
+          title: '${task.title} starts soon',
+          body: 'Starting in $minutesBeforeStart minutes. Ready to focus?',
+          scheduledTime: startingSoonTime,
+          category: 'taskStart',
+        );
+      }
 
-    // 2. Task Start Prompt (at planned start time)
-    if (slot.plannedStartTime.isAfter(now)) {
-      await _scheduleNotification(
-        id: _taskStartPromptBaseId + slotIdHash,
-        title: 'Time to start: ${task.title}',
-        body: 'Your scheduled focus time is now. Tap to begin.',
-        scheduledTime: slot.plannedStartTime,
-        category: 'taskStart',
-        isTimeSensitive: true,
-      );
+      // 2. Task Start Prompt (at planned start time)
+      if (slot.plannedStartTime.isAfter(now)) {
+        await _scheduleNotification(
+          id: _taskStartPromptBaseId + slotIdHash,
+          title: 'Time to start: ${task.title}',
+          body: 'Your scheduled focus time is now. Tap to begin.',
+          scheduledTime: slot.plannedStartTime,
+          category: 'taskStart',
+          isTimeSensitive: true,
+        );
+      }
     }
 
     // 3. Task Ending Soon (X min before planned end)
-    final endingSoonTime = slot.plannedEndTime.subtract(
-      Duration(minutes: minutesBeforeEnd),
-    );
-    if (endingSoonTime.isAfter(now)) {
-      await _scheduleNotification(
-        id: _taskEndingSoonBaseId + slotIdHash,
-        title: '${task.title} ends in $minutesBeforeEnd minutes',
-        body: 'Wrap up or continue past the scheduled time.',
-        scheduledTime: endingSoonTime,
-        category: 'taskEnding',
+    if (minutesBeforeEnd > 0) {
+      final endingSoonTime = slot.plannedEndTime.subtract(
+        Duration(minutes: minutesBeforeEnd),
       );
+      if (endingSoonTime.isAfter(now)) {
+        await _scheduleNotification(
+          id: _taskEndingSoonBaseId + slotIdHash,
+          title: '${task.title} ends in $minutesBeforeEnd minutes',
+          body: 'Wrap up or continue past the scheduled time.',
+          scheduledTime: endingSoonTime,
+          category: 'taskEnding',
+        );
+      }
     }
   }
 
@@ -276,6 +282,38 @@ class NotificationService {
     }
   }
 
+  /// Cancel all task notifications for a list of tasks
+  Future<void> cancelTaskNotificationsForTasks(List<SignalTask> tasks) async {
+    for (final task in tasks) {
+      await cancelTaskNotifications(task);
+    }
+  }
+
+  /// Refresh all task notifications based on current state
+  Future<void> refreshTaskNotifications({
+    required List<SignalTask> tasks,
+    required bool enableStartReminders,
+    required bool enableEndReminders,
+    required int minutesBeforeStart,
+    required int minutesBeforeEnd,
+  }) async {
+    await cancelTaskNotificationsForTasks(tasks);
+
+    if (_isTimerActive) return;
+    if (!enableStartReminders && !enableEndReminders) return;
+
+    final startMinutes = enableStartReminders ? minutesBeforeStart : 0;
+    final endMinutes = enableEndReminders ? minutesBeforeEnd : 0;
+
+    for (final task in tasks) {
+      await scheduleTaskNotifications(
+        task: task,
+        minutesBeforeStart: startMinutes,
+        minutesBeforeEnd: endMinutes,
+      );
+    }
+  }
+
   /// Show immediate "Task Auto-Ended" notification
   Future<void> showTaskAutoEndedNotification({
     required String taskTitle,
@@ -299,6 +337,35 @@ class NotificationService {
       _taskAutoEndedBaseId,
       '$taskTitle session complete! 🎯',
       'Great work! You focused for $durationStr.',
+      details,
+    );
+  }
+
+  /// Show immediate "Midnight Cutoff" notification when timer is force-stopped at 11:59 PM
+  /// This explains to the user why their timer was automatically stopped
+  Future<void> showMidnightCutoffNotification({
+    required String taskTitle,
+    required Duration actualDuration,
+  }) async {
+    final durationStr = _formatDuration(actualDuration);
+
+    const darwinDetails = DarwinNotificationDetails(
+      presentAlert: true,
+      presentBadge: false,
+      presentSound: true,
+      interruptionLevel: InterruptionLevel.active,
+    );
+
+    const details = NotificationDetails(
+      iOS: darwinDetails,
+      macOS: darwinDetails,
+    );
+
+    await _notifications.show(
+      _taskAutoEndedBaseId +
+          1, // Use a slightly different ID to avoid collision
+      '$taskTitle stopped at midnight 🌙',
+      'Timer auto-stopped to prevent overnight tracking. You worked $durationStr today.',
       details,
     );
   }
@@ -626,8 +693,8 @@ class NotificationService {
     // Mark timer as active so inactivity notifications don't fire
     markTimerStarted();
 
-    // Update notifications to show accurate time for the actual task being worked on
-    await _rescheduleNotificationsForActiveTask(activeTask, activeSlot);
+    // Ensure no task notifications fire while actively working
+    await cancelSlotNotifications(activeSlot.id);
   }
 
   /// Update notifications when user stops working on a task
@@ -654,24 +721,6 @@ class NotificationService {
         await cancelTaskNotifications(task);
       }
     }
-  }
-
-  /// Reschedule notifications to reflect the actual task being worked on
-  Future<void> _rescheduleNotificationsForActiveTask(
-    SignalTask task,
-    TimeSlot slot,
-  ) async {
-    // Cancel any existing notifications for this slot first to avoid duplicates
-    await cancelSlotNotifications(slot.id);
-
-    // Schedule updated notifications showing the actual task
-    // Use a short time before end since we're already in the task
-    await _scheduleSlotNotifications(
-      task: task,
-      slot: slot,
-      minutesBeforeStart: 0, // Task already started
-      minutesBeforeEnd: 5,
-    );
   }
 
   /// Check if we should send nudge notifications

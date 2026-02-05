@@ -140,6 +140,7 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
     _signalTaskProvider.onTimerStop = _handleTimerStopped;
     _signalTaskProvider.onAutoEnd = _handleTaskAutoEnded;
     _signalTaskProvider.onTimerReachedEnd = _handleTimerReachedEnd;
+    _signalTaskProvider.onMidnightCutoff = _handleMidnightCutoff;
 
     // Wire up sync callback so remote changes refresh SignalTaskProvider
     _calendarProvider.setOnSignalTasksChanged(() {
@@ -169,20 +170,31 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
 
   /// Handle when a timer starts - update notifications for smart centralized system
   void _handleTimerStarted(SignalTask activeTask, TimeSlot slot) {
-    // Cancel notifications for all inactive tasks first
-    final allTasks = _signalTaskProvider.tasks;
-    NotificationService().cancelNotificationsForInactiveTasks(
-      allTasks,
-      activeTask.id,
-    );
-
-    // Then update notifications for the active task
+    // Update timer state in notification service
     NotificationService().onTimerStarted(activeTask, slot);
+
+    // Cancel all scheduled task notifications while timer is active
+    NotificationService().refreshTaskNotifications(
+      tasks: _signalTaskProvider.tasks,
+      enableStartReminders: _settingsProvider.enableStartReminders,
+      enableEndReminders: _settingsProvider.enableEndReminders,
+      minutesBeforeStart: _settingsProvider.notificationBeforeStartMinutes,
+      minutesBeforeEnd: _settingsProvider.notificationBeforeEndMinutes,
+    );
   }
 
   /// Handle when a timer stops - update notification state
   void _handleTimerStopped(SignalTask task, TimeSlot slot) {
     NotificationService().onTimerStopped(task, slot);
+
+    // Refresh task notifications now that focus has ended
+    NotificationService().refreshTaskNotifications(
+      tasks: _signalTaskProvider.tasks,
+      enableStartReminders: _settingsProvider.enableStartReminders,
+      enableEndReminders: _settingsProvider.enableEndReminders,
+      minutesBeforeStart: _settingsProvider.notificationBeforeStartMinutes,
+      minutesBeforeEnd: _settingsProvider.notificationBeforeEndMinutes,
+    );
   }
 
   /// Handle when a task is auto-ended (timer reached end and autoEnd is enabled)
@@ -216,6 +228,29 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
     // which was already scheduled when "Start My Day" was pressed
     debugPrint(
       'Timer reached end for ${task.title} - user can continue or end',
+    );
+  }
+
+  /// Handle when a task is force-stopped at the midnight cutoff (11:59 PM)
+  /// This prevents accidental overnight time tracking
+  void _handleMidnightCutoff(SignalTask task, TimeSlot slot) {
+    final updatedSlot = task.timeSlots.firstWhere(
+      (s) => s.id == slot.id,
+      orElse: () => slot,
+    );
+    final duration = Duration(seconds: updatedSlot.accumulatedSeconds);
+
+    // Show midnight cutoff notification to explain why timer was stopped
+    NotificationService().showMidnightCutoffNotification(
+      taskTitle: task.title,
+      actualDuration: duration,
+    );
+
+    // Cancel the slot-specific notifications since task has ended
+    NotificationService().cancelSlotNotifications(updatedSlot.id);
+
+    debugPrint(
+      'Midnight cutoff: Force-stopped "${task.title}" to prevent overnight tracking',
     );
   }
 

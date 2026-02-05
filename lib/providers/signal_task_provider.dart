@@ -34,6 +34,16 @@ class SignalTaskProvider extends ChangeNotifier {
   /// Can be used to prompt the user to continue or end
   void Function(SignalTask task, TimeSlot slot)? onTimerReachedEnd;
 
+  /// Callback for when a task timer is force-stopped at midnight cutoff
+  /// Can be used to show a notification explaining why the timer was stopped
+  void Function(SignalTask task, TimeSlot slot)? onMidnightCutoff;
+
+  /// Hard cutoff time - all timers MUST stop at this time regardless of settings
+  /// This prevents accidental overnight tracking when users forget to stop timers
+  /// Set to 11:59 PM (23:59) by default
+  static const int midnightCutoffHour = 23;
+  static const int midnightCutoffMinute = 59;
+
   static const int maxSignalTasks = 5;
   static const int minSignalTasks = 3;
 
@@ -67,13 +77,31 @@ class SignalTaskProvider extends ChangeNotifier {
     final activeSlot = taskToEnd.activeTimeSlot;
     if (activeSlot == null) return;
 
+    final now = DateTime.now();
+
+    // ============ MIDNIGHT CUTOFF CHECK ============
+    // This is a HARD cutoff - timers MUST stop at 11:59 PM regardless of:
+    // - autoEnd setting
+    // - wasManualContinue flag
+    // - plannedEndTime
+    // This prevents accidental overnight tracking (the bug Luke reported)
+    if (_isPastMidnightCutoff(now)) {
+      // Force stop the timer at midnight cutoff
+      stopTimeSlot(taskToEnd.id, activeSlot.id, forceKeep: true);
+      onMidnightCutoff?.call(taskToEnd, activeSlot);
+      debugPrint(
+        '[MidnightCutoff] Force-stopped timer for "${taskToEnd.title}" at ${now.hour}:${now.minute}',
+      );
+      return; // Don't run any other auto-end logic
+    }
+
     // Prevent immediate auto-end for ad-hoc slots that start at "now".
     // When a slot is created with plannedEndTime ~= now + estimatedMinutes,
     // rapid periodic checks can still see isPastPlannedEnd as true if plannedEndTime
     // is already in the past (e.g., bad data / imported slot).
     // Only auto-end if we're meaningfully past the planned end.
     const grace = Duration(seconds: 15);
-    final pastEndBy = DateTime.now().difference(activeSlot.plannedEndTime);
+    final pastEndBy = now.difference(activeSlot.plannedEndTime);
 
     // Check if we've passed the planned end time
     if (pastEndBy >= Duration.zero) {
@@ -97,6 +125,17 @@ class SignalTaskProvider extends ChangeNotifier {
         _checkOvertimeSyncThrottled(taskToEnd, activeSlot);
       }
     }
+  }
+
+  /// Check if the current time is at or past the midnight cutoff (11:59 PM)
+  /// This is a hard boundary to prevent overnight tracking
+  bool _isPastMidnightCutoff(DateTime now) {
+    // Check if we're at or past 23:59
+    if (now.hour > midnightCutoffHour) return true;
+    if (now.hour == midnightCutoffHour && now.minute >= midnightCutoffMinute) {
+      return true;
+    }
+    return false;
   }
 
   /// Throttled check for missed slots - runs at most every 2 minutes

@@ -195,27 +195,14 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
         debugPrint('Synced $syncedCount time slots to Google Calendar');
       }
 
-      // 2. Schedule notifications for all tasks
-      // Get notification timing preferences from settings
-      final minutesBeforeStart =
-          settingsProvider.notificationBeforeStartMinutes;
-      final minutesBeforeEnd = settingsProvider.notificationBeforeEndMinutes;
-
-      for (final task in taskProvider.scheduledTasks) {
-        // Only schedule if user has enabled the relevant notification types
-        if (settingsProvider.enableStartReminders ||
-            settingsProvider.enableEndReminders) {
-          await NotificationService().scheduleTaskNotifications(
-            task: task,
-            minutesBeforeStart: settingsProvider.enableStartReminders
-                ? minutesBeforeStart
-                : 0,
-            minutesBeforeEnd: settingsProvider.enableEndReminders
-                ? minutesBeforeEnd
-                : 0,
-          );
-        }
-      }
+      // 2. Schedule notifications for all tasks (centralized refresh)
+      await NotificationService().refreshTaskNotifications(
+        tasks: taskProvider.tasks,
+        enableStartReminders: settingsProvider.enableStartReminders,
+        enableEndReminders: settingsProvider.enableEndReminders,
+        minutesBeforeStart: settingsProvider.notificationBeforeStartMinutes,
+        minutesBeforeEnd: settingsProvider.notificationBeforeEndMinutes,
+      );
 
       debugPrint(
         'Scheduled notifications for ${taskProvider.scheduledTasks.length} tasks',
@@ -358,23 +345,17 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
         debugPrint('Failed to sync slot to calendar: $e');
       }
 
-      // Schedule notifications for this new slot
+      // Refresh notifications after adding a slot
       try {
-        if (settingsProvider.enableStartReminders ||
-            settingsProvider.enableEndReminders) {
-          await NotificationService().scheduleSlotNotifications(
-            task: updatedTask,
-            slot: addedSlot,
-            minutesBeforeStart: settingsProvider.enableStartReminders
-                ? settingsProvider.notificationBeforeStartMinutes
-                : 0,
-            minutesBeforeEnd: settingsProvider.enableEndReminders
-                ? settingsProvider.notificationBeforeEndMinutes
-                : 0,
-          );
-        }
+        await NotificationService().refreshTaskNotifications(
+          tasks: provider.tasks,
+          enableStartReminders: settingsProvider.enableStartReminders,
+          enableEndReminders: settingsProvider.enableEndReminders,
+          minutesBeforeStart: settingsProvider.notificationBeforeStartMinutes,
+          minutesBeforeEnd: settingsProvider.notificationBeforeEndMinutes,
+        );
       } catch (e) {
-        debugPrint('Failed to schedule notifications: $e');
+        debugPrint('Failed to refresh notifications: $e');
       }
     }
 
@@ -1149,21 +1130,15 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
     );
 
     try {
-      if (settingsProvider.enableStartReminders ||
-          settingsProvider.enableEndReminders) {
-        await NotificationService().scheduleSlotNotifications(
-          task: task,
-          slot: updatedSlot,
-          minutesBeforeStart: settingsProvider.enableStartReminders
-              ? settingsProvider.notificationBeforeStartMinutes
-              : 0,
-          minutesBeforeEnd: settingsProvider.enableEndReminders
-              ? settingsProvider.notificationBeforeEndMinutes
-              : 0,
-        );
-      }
+      await NotificationService().refreshTaskNotifications(
+        tasks: provider.tasks,
+        enableStartReminders: settingsProvider.enableStartReminders,
+        enableEndReminders: settingsProvider.enableEndReminders,
+        minutesBeforeStart: settingsProvider.notificationBeforeStartMinutes,
+        minutesBeforeEnd: settingsProvider.notificationBeforeEndMinutes,
+      );
     } catch (e) {
-      debugPrint('Failed to schedule notifications: $e');
+      debugPrint('Failed to refresh notifications: $e');
     }
 
     // Update calendar with bounds checking
