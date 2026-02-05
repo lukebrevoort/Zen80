@@ -5,9 +5,7 @@ import '../../models/day_schedule.dart';
 import '../../providers/settings_provider.dart';
 import '../../widgets/common/focus_hours_dial.dart';
 
-/// Schedule Setup Screen - Configure focus times per day
-/// Allows users to set their active hours for each day of the week
-/// Supports cross-midnight schedules (e.g., 10 AM - 2 AM next day)
+/// Focus Goal Screen - Configure daily focus hours
 class ScheduleSetupScreen extends StatefulWidget {
   final VoidCallback onContinue;
   final VoidCallback? onBack;
@@ -75,11 +73,17 @@ class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
 
   void _loadCurrentSchedule() {
     final settings = context.read<SettingsProvider>();
-    _weeklySchedule = Map<int, DaySchedule>.from(
-      settings.weeklySchedule.map(
-        (key, value) => MapEntry(key, value.copyWith()),
-      ),
-    );
+    _weeklySchedule = {
+      for (var day = 1; day <= 7; day++)
+        day: DaySchedule(
+          dayOfWeek: day,
+          activeStartHour: 0,
+          activeStartMinute: 0,
+          activeEndHour: 23,
+          activeEndMinute: 59,
+          isActiveDay: true,
+        ),
+    };
     _focusHoursPerDay = settings.focusHoursPerDay;
   }
 
@@ -180,21 +184,7 @@ class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
                     _buildFocusGoalSection(),
 
                     const SizedBox(height: 32),
-
-                    // Quick presets
-                    _buildPresetsSection(),
-
-                    const SizedBox(height: 32),
-
-                    // Weekly schedule
-                    _buildWeeklySchedule(),
-
-                    const SizedBox(height: 24),
-
-                    // Weekly summary
-                    _buildWeeklySummary(),
-
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),

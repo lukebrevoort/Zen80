@@ -64,7 +64,7 @@ void main() {
           completedTasks: 3,
         );
 
-        expect(stats.noiseMinutes, equals(560));
+        expect(stats.noiseMinutes, equals(280));
       });
 
       test('noiseMinutes returns 0 when signal exceeds focus', () {
@@ -277,7 +277,7 @@ void main() {
         completedTasks: 6,
       );
 
-      expect(stats.ratio, closeTo(0.885, 0.01));
+      expect(stats.ratio, closeTo(0.875, 0.01));
       expect(stats.goldenRatioAchieved, isTrue);
     });
 

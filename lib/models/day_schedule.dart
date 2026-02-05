@@ -39,10 +39,10 @@ class DaySchedule {
 
   DaySchedule({
     required this.dayOfWeek,
-    this.activeStartHour = 8,
+    this.activeStartHour = 0,
     this.activeStartMinute = 0,
     this.activeEndHour = 23,
-    this.activeEndMinute = 0,
+    this.activeEndMinute = 59,
     this.isActiveDay = true,
   });
 

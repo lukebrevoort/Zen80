@@ -6,12 +6,10 @@ import '../services/background_sync_service.dart';
 import '../services/sync_service.dart';
 import '../providers/calendar_provider.dart';
 import '../providers/settings_provider.dart';
-import '../models/day_schedule.dart';
 import '../widgets/common/focus_hours_dial.dart';
 import 'tag_management_screen.dart';
 import 'calendar_connection_screen.dart';
 import 'weekly_review_screen.dart';
-import 'onboarding/schedule_setup_screen.dart';
 import 'onboarding/timezone_screen.dart';
 
 /// Settings screen for configuring app preferences
@@ -142,18 +140,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (result != null) {
       await settings.setNotificationBeforeEndMinutes(result);
     }
-  }
-
-  void _openFocusTimesSettings() {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => ScheduleSetupScreen(
-          onContinue: () => Navigator.of(context).pop(),
-          onBack: () => Navigator.of(context).pop(),
-          isOnboarding: false,
-        ),
-      ),
-    );
   }
 
   void _openTimezoneSettings() {
@@ -376,8 +362,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Focus Times section
           _buildSectionHeader('FOCUS TIMES'),
           _buildFocusHoursCard(),
-          const SizedBox(height: 12),
-          _buildFocusScheduleCard(),
 
           const SizedBox(height: 24),
 
@@ -789,162 +773,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         );
       },
-    );
-  }
-
-  Widget _buildFocusScheduleCard() {
-    return Consumer<SettingsProvider>(
-      builder: (context, settings, _) {
-        final schedule = settings.weeklySchedule;
-        final totalHours = settings.totalWeeklyActiveHours;
-        final activeDays = schedule.values.where((s) => s.isActiveDay).length;
-        final avgHours = activeDays > 0 ? totalHours / activeDays : 0.0;
-
-        return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Card(
-            elevation: 0,
-            color: Colors.grey.shade50,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: BorderSide(color: Colors.grey.shade200),
-            ),
-            child: InkWell(
-              onTap: _openFocusTimesSettings,
-              borderRadius: BorderRadius.circular(12),
-              child: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // Header row
-                    Row(
-                      children: [
-                        Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: const Icon(
-                            Icons.schedule,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Active Hours Schedule',
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              Text(
-                                'Used for scheduling and reminders',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(Icons.chevron_right, color: Colors.grey.shade400),
-                      ],
-                    ),
-
-                    const SizedBox(height: 16),
-
-                    // Summary stats
-                    Row(
-                      children: [
-                        _buildFocusStat(
-                          '${totalHours.toStringAsFixed(1)}h',
-                          'Weekly',
-                        ),
-                        const SizedBox(width: 16),
-                        _buildFocusStat('$activeDays', 'Active Days'),
-                        const SizedBox(width: 16),
-                        _buildFocusStat(
-                          '${avgHours.toStringAsFixed(1)}h',
-                          'Daily Avg',
-                        ),
-                      ],
-                    ),
-
-                    const SizedBox(height: 12),
-
-                    // Day pills
-                    _buildDayPills(schedule),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildFocusStat(String value, String label) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Column(
-          children: [
-            Text(
-              value,
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Text(
-              label,
-              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDayPills(Map<int, DaySchedule> schedule) {
-    const dayNames = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-      children: List.generate(7, (index) {
-        final dayOfWeek = index + 1; // 1 = Monday, 7 = Sunday
-        final daySchedule = schedule[dayOfWeek];
-        final isEnabled = daySchedule?.isActiveDay ?? false;
-
-        return Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: isEnabled ? Colors.black : Colors.grey.shade200,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Center(
-            child: Text(
-              dayNames[index],
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: isEnabled ? Colors.white : Colors.grey.shade500,
-              ),
-            ),
-          ),
-        );
-      }),
     );
   }
 
