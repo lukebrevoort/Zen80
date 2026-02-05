@@ -1411,10 +1411,8 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
         if (_dragPosition != null && mounted) {
           final settingsProvider = context.read<SettingsProvider>();
           final schedule = settingsProvider.todaySchedule;
-          // Use effective start hour which respects early start overrides
-          final effectiveStartHour = settingsProvider
-              .getEffectiveStartHourForDate(_today);
-          final displayStartHour = (effectiveStartHour - 1).clamp(0, 23);
+          // Default calendar view starts at 8 AM
+          const displayStartHour = 8;
           final newPreviewTime = _calculateTimeFromPosition(
             _dragPosition!,
             displayStartHour,
@@ -1438,10 +1436,8 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
         if (_dragPosition != null && mounted) {
           final settingsProvider = context.read<SettingsProvider>();
           final schedule = settingsProvider.todaySchedule;
-          // Use effective start hour which respects early start overrides
-          final effectiveStartHour = settingsProvider
-              .getEffectiveStartHourForDate(_today);
-          final displayStartHour = (effectiveStartHour - 1).clamp(0, 23);
+          // Default calendar view starts at 8 AM
+          const displayStartHour = 8;
           final newPreviewTime = _calculateTimeFromPosition(
             _dragPosition!,
             displayStartHour,
@@ -1471,14 +1467,8 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
     final ratio = _getProjectedRatio(taskProvider, settingsProvider);
     final percentage = (ratio * 100).toInt();
     final schedule = settingsProvider.todaySchedule;
-    // Start 1 hour earlier than effective start time to provide visual buffer
-    // Use effective start hour which respects any early start overrides
-    final effectiveStartHour = settingsProvider.getEffectiveStartHourForDate(
-      _today,
-    );
-    final displayStartHour = effectiveStartHour > 0
-        ? effectiveStartHour - 1
-        : 0;
+    // Default calendar view starts at 8 AM
+    const displayStartHour = 8;
 
     return Scaffold(
       backgroundColor: Colors.white,
