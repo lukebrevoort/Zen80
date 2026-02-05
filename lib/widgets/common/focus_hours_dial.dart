@@ -25,6 +25,17 @@ class FocusHoursDial extends StatefulWidget {
 }
 
 class _FocusHoursDialState extends State<FocusHoursDial> {
+  Color _stepColor(int hours, int maxHours) {
+    final safeMax = maxHours > 0 ? maxHours : 12;
+    final clampedHours = hours.clamp(1, safeMax);
+    final ratio = (clampedHours - 1) / (safeMax - 1);
+
+    final hue = 0 + (120 * ratio);
+    final saturation = ratio >= 0.6 ? 0.72 : 0.78;
+    final lightness = ratio >= 0.6 ? 0.46 : 0.5;
+    return HSLColor.fromAHSL(1, hue, saturation, lightness).toColor();
+  }
+
   void _updateFromOffset(Offset localPosition, Size size) {
     final center = Offset(size.width / 2, size.height / 2);
     final vector = localPosition - center;
@@ -49,6 +60,7 @@ class _FocusHoursDialState extends State<FocusHoursDial> {
   @override
   Widget build(BuildContext context) {
     final progress = widget.hours / widget.maxHours;
+    final progressColor = _stepColor(widget.hours, widget.maxHours);
 
     return Column(
       children: [
@@ -65,7 +77,10 @@ class _FocusHoursDialState extends State<FocusHoursDial> {
             width: widget.size,
             height: widget.size,
             child: CustomPaint(
-              painter: _DialPainter(progress: progress, ticks: widget.maxHours),
+              painter: _DialPainter(
+                progress: progress,
+                progressColor: progressColor,
+              ),
               child: Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
@@ -102,7 +117,7 @@ class _FocusHoursDialState extends State<FocusHoursDial> {
             divisions: widget.maxHours - widget.minHours,
             label: '${widget.hours}h',
             onChanged: (value) => widget.onChanged(value.round()),
-            activeColor: Colors.black,
+            activeColor: progressColor,
             inactiveColor: Colors.grey.shade300,
           ),
         ],
@@ -113,9 +128,9 @@ class _FocusHoursDialState extends State<FocusHoursDial> {
 
 class _DialPainter extends CustomPainter {
   final double progress;
-  final int ticks;
+  final Color progressColor;
 
-  _DialPainter({required this.progress, required this.ticks});
+  _DialPainter({required this.progress, required this.progressColor});
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -123,51 +138,32 @@ class _DialPainter extends CustomPainter {
     final radius = size.width / 2 - 10;
     const strokeWidth = 12.0;
 
+    const startAngle = -math.pi / 2;
+    final dialRect = Rect.fromCircle(center: center, radius: radius);
+
     final backgroundPaint = Paint()
-      ..color = Colors.grey.shade200
+      ..color = Colors.black.withValues(alpha: 0.06)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
       ..strokeCap = StrokeCap.round;
 
     final progressPaint = Paint()
-      ..color = Colors.black
+      ..color = progressColor
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
+      ..strokeCap = StrokeCap.round
+      ..isAntiAlias = true;
 
     canvas.drawCircle(center, radius, backgroundPaint);
 
-    const startAngle = -math.pi / 2;
     final sweepAngle = math.pi * 2 * progress;
 
-    canvas.drawArc(
-      Rect.fromCircle(center: center, radius: radius),
-      startAngle,
-      sweepAngle,
-      false,
-      progressPaint,
-    );
-
-    final tickPaint = Paint()
-      ..color = Colors.grey.shade400
-      ..strokeWidth = 2;
-
-    for (int i = 0; i < ticks; i++) {
-      final angle = startAngle + (math.pi * 2 * i / ticks);
-      final inner = Offset(
-        center.dx + (radius - 10) * math.cos(angle),
-        center.dy + (radius - 10) * math.sin(angle),
-      );
-      final outer = Offset(
-        center.dx + (radius + 2) * math.cos(angle),
-        center.dy + (radius + 2) * math.sin(angle),
-      );
-      canvas.drawLine(inner, outer, tickPaint);
-    }
+    canvas.drawArc(dialRect, startAngle, sweepAngle, false, progressPaint);
   }
 
   @override
   bool shouldRepaint(_DialPainter oldDelegate) {
-    return oldDelegate.progress != progress || oldDelegate.ticks != ticks;
+    return oldDelegate.progress != progress ||
+        oldDelegate.progressColor != progressColor;
   }
 }
