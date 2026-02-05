@@ -312,19 +312,19 @@ void main() {
     // From QNA_GUIDE.md: By default, users have 16 focus hours (8 for sleep)
 
     test('default weekly focus minutes calculation', () {
-      const focusHoursPerDay = 16;
-      const focusMinutesPerDay = focusHoursPerDay * 60; // 960 min/day
-      const focusMinutesPerWeek = focusMinutesPerDay * 7; // 6720 min/week
+      const focusHoursPerDay = 8;
+      const focusMinutesPerDay = focusHoursPerDay * 60; // 480 min/day
+      const focusMinutesPerWeek = focusMinutesPerDay * 7; // 3360 min/week
 
-      expect(focusMinutesPerDay, equals(960));
-      expect(focusMinutesPerWeek, equals(6720));
+      expect(focusMinutesPerDay, equals(480));
+      expect(focusMinutesPerWeek, equals(3360));
     });
 
     test('80/20 golden ratio with default focus', () {
       final stats = WeeklyStats(
         weekStartDate: DateTime(2026, 1, 5),
-        totalFocusMinutes: 6720, // 16h * 7 days
-        totalSignalMinutes: 5376, // 80% of 6720
+        totalFocusMinutes: 3360, // 8h * 7 days
+        totalSignalMinutes: 2688, // 80% of 3360
       );
 
       expect(stats.signalNoiseRatio, closeTo(0.8, 0.001));
@@ -335,11 +335,11 @@ void main() {
       // From QNA_GUIDE: "Unless you have designated something as signal, it is noise"
       final stats = WeeklyStats(
         weekStartDate: DateTime(2026, 1, 5),
-        totalFocusMinutes: 6720,
+        totalFocusMinutes: 3360,
         totalSignalMinutes: 2000,
       );
 
-      expect(stats.totalNoiseMinutes, equals(4720));
+      expect(stats.totalNoiseMinutes, equals(1360));
       expect(stats.signalNoiseRatio, lessThan(0.8));
       expect(stats.goldenRatioAchieved, isFalse);
     });

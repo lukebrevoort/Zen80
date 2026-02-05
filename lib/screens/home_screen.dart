@@ -82,81 +82,16 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// Calculate signal ratio for today based on elapsed time
-  /// Signal ratio = time spent on signal tasks / elapsed active time
+  /// Signal ratio = time spent on signal tasks / daily focus goal
   double _getSignalRatio(
     SignalTaskProvider taskProvider,
     SettingsProvider settingsProvider,
   ) {
-    final schedule = settingsProvider.todaySchedule;
-    final now = DateTime.now();
+    final focusMinutes = settingsProvider.focusMinutesPerDay;
+    if (focusMinutes <= 0) return 0;
 
-    // Use effective start time if the user started early today.
-    // This ensures early work (before configured start) counts toward the ratio.
-    DateTime? effectiveStart = settingsProvider.getEffectiveStartTime(
-      DateTime(now.year, now.month, now.day),
-    );
-
-    // Fallback: derive the earliest actual start today if no override exists.
-    // This prevents ratios from snapping to 0 before focus start after an early session ends.
-    final nowMinutes = now.hour * 60 + now.minute;
-    final scheduleStartMinutes =
-        schedule.activeStartHour * 60 + schedule.activeStartMinute;
-    final scheduleEndMinutes =
-        schedule.activeEndHour * 60 + schedule.activeEndMinute;
-
-    final scheduleStart =
-        schedule.crossesMidnight &&
-            nowMinutes < scheduleEndMinutes &&
-            nowMinutes < scheduleStartMinutes
-        ? schedule.getStartTimeForDate(now.subtract(const Duration(days: 1)))
-        : schedule.getStartTimeForDate(now);
-    DateTime? earliestActualStart;
-    for (final task in taskProvider.tasks) {
-      for (final slot in task.timeSlots) {
-        if (slot.isDiscarded) continue;
-        final candidate = slot.sessionStartTime ?? slot.actualStartTime;
-        if (candidate == null) continue;
-        if (candidate.year != now.year ||
-            candidate.month != now.month ||
-            candidate.day != now.day) {
-          continue;
-        }
-        if (earliestActualStart == null ||
-            candidate.isBefore(earliestActualStart)) {
-          earliestActualStart = candidate;
-        }
-      }
-    }
-
-    if (earliestActualStart != null &&
-        earliestActualStart.isBefore(scheduleStart)) {
-      if (effectiveStart == null ||
-          earliestActualStart.isBefore(effectiveStart)) {
-        effectiveStart = earliestActualStart;
-      }
-    }
-
-    int elapsedMinutes;
-    if (effectiveStart != null) {
-      final effectiveEnd = schedule.getEndTimeForDate(now);
-
-      if (!now.isAfter(effectiveStart)) {
-        elapsedMinutes = 0;
-      } else {
-        final cappedNow = now.isAfter(effectiveEnd) ? effectiveEnd : now;
-        elapsedMinutes = cappedNow.difference(effectiveStart).inMinutes;
-        if (elapsedMinutes < 0) elapsedMinutes = 0;
-      }
-    } else {
-      // Default behavior: elapsed since configured start
-      elapsedMinutes = schedule.getElapsedMinutes(now);
-    }
-
-    if (elapsedMinutes == 0) return 0;
-
-    // Signal time is actual minutes worked on signal tasks
     final signalMinutes = taskProvider.totalActualMinutes;
-    return (signalMinutes / elapsedMinutes).clamp(0.0, 1.0);
+    return (signalMinutes / focusMinutes).clamp(0.0, 1.0);
   }
 
   /// Get tasks sorted by schedule time (scheduled first, then unscheduled)

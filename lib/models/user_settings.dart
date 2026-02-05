@@ -50,6 +50,9 @@ class UserSettings extends HiveObject {
   @HiveField(13)
   bool enableNextTaskReminders; // Notify about next scheduled task
 
+  @HiveField(14)
+  int focusHoursPerDay; // Target focus hours per day for ratio calculations
+
   UserSettings({
     Map<int, DaySchedule>? weeklySchedule,
     this.autoStartTasks = false,
@@ -65,6 +68,7 @@ class UserSettings extends HiveObject {
     this.enableStartReminders = true,
     this.enableEndReminders = true,
     this.enableNextTaskReminders = true,
+    this.focusHoursPerDay = 8,
   }) : weeklySchedule = weeklySchedule ?? DaySchedule.defaultWeeklySchedule;
 
   /// Get the effective timezone
@@ -131,6 +135,7 @@ class UserSettings extends HiveObject {
     bool? enableStartReminders,
     bool? enableEndReminders,
     bool? enableNextTaskReminders,
+    int? focusHoursPerDay,
   }) {
     return UserSettings(
       weeklySchedule: weeklySchedule ?? Map.from(this.weeklySchedule),
@@ -154,6 +159,7 @@ class UserSettings extends HiveObject {
       enableEndReminders: enableEndReminders ?? this.enableEndReminders,
       enableNextTaskReminders:
           enableNextTaskReminders ?? this.enableNextTaskReminders,
+      focusHoursPerDay: focusHoursPerDay ?? this.focusHoursPerDay,
     );
   }
 }

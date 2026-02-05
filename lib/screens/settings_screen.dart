@@ -7,6 +7,7 @@ import '../services/sync_service.dart';
 import '../providers/calendar_provider.dart';
 import '../providers/settings_provider.dart';
 import '../models/day_schedule.dart';
+import '../widgets/common/focus_hours_dial.dart';
 import 'tag_management_screen.dart';
 import 'calendar_connection_screen.dart';
 import 'weekly_review_screen.dart';
@@ -374,7 +375,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
           // Focus Times section
           _buildSectionHeader('FOCUS TIMES'),
-          _buildFocusTimesCard(),
+          _buildFocusHoursCard(),
+          const SizedBox(height: 12),
+          _buildFocusScheduleCard(),
 
           const SizedBox(height: 24),
 
@@ -696,7 +699,100 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Widget _buildFocusTimesCard() {
+  Widget _buildFocusHoursCard() {
+    return Consumer<SettingsProvider>(
+      builder: (context, settings, _) {
+        final hours = settings.focusHoursPerDay;
+
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Card(
+            elevation: 0,
+            color: Colors.white,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+              side: BorderSide(color: Colors.grey.shade200),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(
+                          Icons.track_changes,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Daily Focus Goal',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                            Text(
+                              'Used to calculate your Signal Ratio',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Text(
+                        '$hours h',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Center(
+                    child: FocusHoursDial(
+                      hours: hours,
+                      onChanged: (value) => settings.setFocusHoursPerDay(value),
+                      size: 170,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Center(
+                    child: Text(
+                      'Aim high. Max out at 12.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade600,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildFocusScheduleCard() {
     return Consumer<SettingsProvider>(
       builder: (context, settings, _) {
         final schedule = settings.weeklySchedule;
@@ -743,14 +839,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Daily Focus Times',
+                                'Active Hours Schedule',
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                               Text(
-                                'Your productive hours for Signal Ratio',
+                                'Used for scheduling and reminders',
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: Colors.grey,

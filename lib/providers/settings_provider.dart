@@ -77,6 +77,12 @@ class SettingsProvider extends ChangeNotifier {
   /// Whether next task reminders are enabled
   bool get enableNextTaskReminders => _settings.enableNextTaskReminders;
 
+  /// Target focus hours per day
+  int get focusHoursPerDay => _settings.focusHoursPerDay;
+
+  /// Target focus minutes per day
+  int get focusMinutesPerDay => _settings.focusHoursPerDay * 60;
+
   /// Today's schedule
   DaySchedule get todaySchedule => _settings.todaySchedule;
 
@@ -297,6 +303,13 @@ class SettingsProvider extends ChangeNotifier {
   /// Update next task reminders setting
   Future<void> setEnableNextTaskReminders(bool value) async {
     _settings = _settings.copyWith(enableNextTaskReminders: value);
+    await _saveSettings();
+  }
+
+  /// Update focus hours per day
+  Future<void> setFocusHoursPerDay(int hours) async {
+    final clamped = hours.clamp(1, 12);
+    _settings = _settings.copyWith(focusHoursPerDay: clamped);
     await _saveSettings();
   }
 

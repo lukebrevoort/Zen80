@@ -456,6 +456,7 @@ class StorageService {
       'notificationBeforeEndMinutes': settings.notificationBeforeEndMinutes,
       'hasCompletedOnboarding': settings.hasCompletedOnboarding,
       'defaultSignalColorHex': settings.defaultSignalColorHex,
+      'focusHoursPerDay': settings.focusHoursPerDay,
     };
   }
 

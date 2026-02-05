@@ -31,13 +31,14 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       enableStartReminders: fields[11] as bool? ?? true,
       enableEndReminders: fields[12] as bool? ?? true,
       enableNextTaskReminders: fields[13] as bool? ?? true,
+      focusHoursPerDay: fields[14] as int? ?? 8,
     );
   }
 
   @override
   void write(BinaryWriter writer, UserSettings obj) {
     writer
-      ..writeByte(14)
+      ..writeByte(15)
       ..writeByte(0)
       ..write(obj.weeklySchedule)
       ..writeByte(1)
@@ -65,7 +66,9 @@ class UserSettingsAdapter extends TypeAdapter<UserSettings> {
       ..writeByte(12)
       ..write(obj.enableEndReminders)
       ..writeByte(13)
-      ..write(obj.enableNextTaskReminders);
+      ..write(obj.enableNextTaskReminders)
+      ..writeByte(14)
+      ..write(obj.focusHoursPerDay);
   }
 
   @override

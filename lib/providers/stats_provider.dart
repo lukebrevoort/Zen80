@@ -73,15 +73,19 @@ class StatsProvider extends ChangeNotifier {
   final SettingsService _settingsService;
 
   /// Default focus hours per day (from QNA_GUIDE.md)
-  static const int defaultFocusHoursPerDay = 16;
+  static const int defaultFocusHoursPerDay = 8;
 
   StatsProvider(this._storageService, this._settingsService);
 
   // ============ Focus Hours Configuration ============
 
   /// Get focus hours per day from settings or default
-  /// SettingsService doesn't have focusHoursPerDay yet, so default to 16
-  int get focusHoursPerDay => defaultFocusHoursPerDay;
+  int get focusHoursPerDay {
+    final settings = _storageService.getUserSettings();
+    final hours = settings.focusHoursPerDay;
+    if (hours <= 0) return defaultFocusHoursPerDay;
+    return hours;
+  }
 
   /// Focus minutes per day
   int get focusMinutesPerDay => focusHoursPerDay * 60;
