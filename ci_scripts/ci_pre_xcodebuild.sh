@@ -2,14 +2,17 @@
 set -euo pipefail
 
 # Defensive fallback: if post-clone didn't run, prepare Flutter + Pods now.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="${CI_PRIMARY_REPOSITORY_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
+. "$SCRIPT_DIR/ci_common.sh"
 
 cd "$REPO_ROOT"
+ensure_flutter
 
 if [ ! -f "ios/Flutter/Generated.xcconfig" ]; then
   echo "==> [pre-xcodebuild] Missing Generated.xcconfig, generating iOS Flutter config"
-  flutter pub get
-  flutter build ios --config-only --no-codesign
+  "$FLUTTER_BIN" pub get
+  "$FLUTTER_BIN" build ios --config-only --no-codesign
 fi
 
 if [ ! -f "ios/Pods/Target Support Files/Pods-Runner/Pods-Runner-resources-Release-input-files.xcfilelist" ]; then

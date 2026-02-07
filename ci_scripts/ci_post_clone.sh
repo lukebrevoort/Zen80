@@ -1,18 +1,21 @@
 #!/bin/sh
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="${CI_PRIMARY_REPOSITORY_PATH:-$(cd "$(dirname "$0")/.." && pwd)}"
+. "$SCRIPT_DIR/ci_common.sh"
 
 cd "$REPO_ROOT"
+ensure_flutter
 
 echo "==> Flutter version"
-flutter --version
+"$FLUTTER_BIN" --version
 
 echo "==> Resolving Dart dependencies"
-flutter pub get
+"$FLUTTER_BIN" pub get
 
 echo "==> Generating iOS Flutter config files"
-flutter build ios --config-only --no-codesign
+"$FLUTTER_BIN" build ios --config-only --no-codesign
 
 echo "==> Installing CocoaPods dependencies"
 cd "$REPO_ROOT/ios"
