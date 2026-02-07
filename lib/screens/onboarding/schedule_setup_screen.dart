@@ -3,10 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../models/day_schedule.dart';
 import '../../providers/settings_provider.dart';
+import '../../widgets/common/focus_hours_dial.dart';
 
-/// Schedule Setup Screen - Configure focus times per day
-/// Allows users to set their active hours for each day of the week
-/// Supports cross-midnight schedules (e.g., 10 AM - 2 AM next day)
+/// Focus Goal Screen - Configure daily focus hours
 class ScheduleSetupScreen extends StatefulWidget {
   final VoidCallback onContinue;
   final VoidCallback? onBack;
@@ -27,6 +26,7 @@ class ScheduleSetupScreen extends StatefulWidget {
 
 class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
   late Map<int, DaySchedule> _weeklySchedule;
+  int _focusHoursPerDay = 8;
   bool _isLoading = false;
 
   // Common presets for quick selection
@@ -73,11 +73,18 @@ class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
 
   void _loadCurrentSchedule() {
     final settings = context.read<SettingsProvider>();
-    _weeklySchedule = Map<int, DaySchedule>.from(
-      settings.weeklySchedule.map(
-        (key, value) => MapEntry(key, value.copyWith()),
-      ),
-    );
+    _weeklySchedule = {
+      for (var day = 1; day <= 7; day++)
+        day: DaySchedule(
+          dayOfWeek: day,
+          activeStartHour: 0,
+          activeStartMinute: 0,
+          activeEndHour: 23,
+          activeEndMinute: 59,
+          isActiveDay: true,
+        ),
+    };
+    _focusHoursPerDay = settings.focusHoursPerDay;
   }
 
   Future<void> _saveAndContinue() async {
@@ -85,6 +92,7 @@ class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
 
     try {
       final settings = context.read<SettingsProvider>();
+      await settings.setFocusHoursPerDay(_focusHoursPerDay);
       await settings.updateWeeklySchedule(_weeklySchedule);
       await settings.completeScheduleSetup();
       widget.onContinue();
@@ -173,20 +181,10 @@ class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
 
                     const SizedBox(height: 32),
 
-                    // Quick presets
-                    _buildPresetsSection(),
+                    _buildFocusGoalSection(),
 
                     const SizedBox(height: 32),
-
-                    // Weekly schedule
-                    _buildWeeklySchedule(),
-
-                    const SizedBox(height: 24),
-
-                    // Weekly summary
-                    _buildWeeklySummary(),
-
-                    const SizedBox(height: 32),
+                    const SizedBox(height: 16),
                   ],
                 ),
               ),
@@ -242,7 +240,7 @@ class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const Text(
-          'Set Your Focus Times',
+          'Set Your Focus Goal',
           style: TextStyle(
             fontSize: 28,
             fontWeight: FontWeight.bold,
@@ -251,7 +249,7 @@ class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
         ),
         const SizedBox(height: 12),
         Text(
-          'When are you available to work on Signal tasks? This determines your daily Signal Ratio calculation.',
+          'Choose how many hours you want to focus each day. This powers your Signal Ratio while your schedule below keeps planning on track.',
           style: TextStyle(
             fontSize: 16,
             color: Colors.grey.shade600,
@@ -272,8 +270,60 @@ class _ScheduleSetupScreenState extends State<ScheduleSetupScreen> {
               const SizedBox(width: 12),
               Expanded(
                 child: Text(
-                  'Pro tip: End times can extend past midnight for night owls!',
+                  'Pro tip: Your focus goal is separate from your active hours.',
                   style: TextStyle(fontSize: 13, color: Colors.amber.shade900),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFocusGoalSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Daily Focus Goal',
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            color: Colors.grey.shade500,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.grey.shade200),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.04),
+                blurRadius: 12,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              FocusHoursDial(
+                hours: _focusHoursPerDay,
+                onChanged: (value) => setState(() {
+                  _focusHoursPerDay = value;
+                }),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Aim high. Max out at 12.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ],

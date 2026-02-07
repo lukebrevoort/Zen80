@@ -13,8 +13,8 @@ void main() {
       test('ratio calculates signal divided by focus', () {
         final stats = DailyStats(
           date: testDate,
-          signalMinutes: 480, // 8 hours
-          focusMinutes: 960, // 16 hours
+          signalMinutes: 240, // 4 hours
+          focusMinutes: 480, // 8 hours
           completedTasks: 5,
         );
 
@@ -46,8 +46,8 @@ void main() {
       test('percentage returns ratio * 100', () {
         final stats = DailyStats(
           date: testDate,
-          signalMinutes: 768, // 80% of 960
-          focusMinutes: 960,
+          signalMinutes: 384, // 80% of 480
+          focusMinutes: 480,
           completedTasks: 5,
         );
 
@@ -59,12 +59,12 @@ void main() {
       test('noiseMinutes equals focus minus signal', () {
         final stats = DailyStats(
           date: testDate,
-          signalMinutes: 400,
-          focusMinutes: 960,
+          signalMinutes: 200,
+          focusMinutes: 480,
           completedTasks: 3,
         );
 
-        expect(stats.noiseMinutes, equals(560));
+        expect(stats.noiseMinutes, equals(280));
       });
 
       test('noiseMinutes returns 0 when signal exceeds focus', () {
@@ -83,8 +83,8 @@ void main() {
       test('goldenRatioAchieved is true at exactly 80%', () {
         final stats = DailyStats(
           date: testDate,
-          signalMinutes: 768, // 80% of 960
-          focusMinutes: 960,
+          signalMinutes: 384, // 80% of 480
+          focusMinutes: 480,
           completedTasks: 4,
         );
 
@@ -95,8 +95,8 @@ void main() {
       test('goldenRatioAchieved is true above 80%', () {
         final stats = DailyStats(
           date: testDate,
-          signalMinutes: 800,
-          focusMinutes: 960,
+          signalMinutes: 420,
+          focusMinutes: 480,
           completedTasks: 4,
         );
 
@@ -106,8 +106,8 @@ void main() {
       test('goldenRatioAchieved is false below 80%', () {
         final stats = DailyStats(
           date: testDate,
-          signalMinutes: 750,
-          focusMinutes: 960,
+          signalMinutes: 360,
+          focusMinutes: 480,
           completedTasks: 4,
         );
 
@@ -120,7 +120,7 @@ void main() {
         final stats = DailyStats(
           date: testDate,
           signalMinutes: 150,
-          focusMinutes: 960,
+          focusMinutes: 480,
           completedTasks: 3,
         );
 
@@ -131,11 +131,11 @@ void main() {
         final stats = DailyStats(
           date: testDate,
           signalMinutes: 0,
-          focusMinutes: 960,
+          focusMinutes: 480,
           completedTasks: 0,
         );
 
-        expect(stats.formattedFocusTime, equals('16h'));
+        expect(stats.formattedFocusTime, equals('8h'));
       });
     });
 
@@ -153,42 +153,40 @@ void main() {
   });
 
   group('StatsProvider Configuration', () {
-    test('default focus hours per day is 16', () {
-      // From QNA_GUIDE.md: "By default it is 18 hours for steve jobs,
-      // but we will be more generous and say 16 hours (8 for sleep)"
-      expect(StatsProvider.defaultFocusHoursPerDay, equals(16));
+    test('default focus hours per day is 8', () {
+      expect(StatsProvider.defaultFocusHoursPerDay, equals(8));
     });
   });
 
   group('Focus Hours Scenarios', () {
     // These tests verify the business logic without needing mocks
 
-    test('16 hours per day equals 960 minutes', () {
-      const focusHoursPerDay = 16;
+    test('8 hours per day equals 480 minutes', () {
+      const focusHoursPerDay = 8;
       const focusMinutesPerDay = focusHoursPerDay * 60;
 
-      expect(focusMinutesPerDay, equals(960));
+      expect(focusMinutesPerDay, equals(480));
     });
 
-    test('weekly focus is 7 days * 960 minutes = 6720', () {
-      const focusMinutesPerDay = 960;
+    test('weekly focus is 7 days * 480 minutes = 3360', () {
+      const focusMinutesPerDay = 480;
       const focusMinutesPerWeek = focusMinutesPerDay * 7;
 
-      expect(focusMinutesPerWeek, equals(6720));
+      expect(focusMinutesPerWeek, equals(3360));
     });
 
     test('80% golden ratio target for a day', () {
-      const focusMinutesPerDay = 960;
+      const focusMinutesPerDay = 480;
       const goldenRatioTarget = focusMinutesPerDay * 0.8;
 
-      expect(goldenRatioTarget, equals(768));
+      expect(goldenRatioTarget, equals(384));
     });
 
     test('80% golden ratio target for a week', () {
-      const focusMinutesPerWeek = 6720;
+      const focusMinutesPerWeek = 3360;
       const goldenRatioTarget = focusMinutesPerWeek * 0.8;
 
-      expect(goldenRatioTarget, equals(5376));
+      expect(goldenRatioTarget, equals(2688));
     });
   });
 
@@ -262,32 +260,32 @@ void main() {
       final stats = DailyStats(
         date: DateTime(2026, 1, 5),
         signalMinutes: 0,
-        focusMinutes: 960,
+        focusMinutes: 480,
         completedTasks: 0,
       );
 
       expect(stats.ratio, equals(0.0));
-      expect(stats.noiseMinutes, equals(960));
+      expect(stats.noiseMinutes, equals(480));
       expect(stats.goldenRatioAchieved, isFalse);
     });
 
     test('highly productive day', () {
       final stats = DailyStats(
         date: DateTime(2026, 1, 5),
-        signalMinutes: 850, // ~88% of 960
-        focusMinutes: 960,
+        signalMinutes: 420, // ~88% of 480
+        focusMinutes: 480,
         completedTasks: 6,
       );
 
-      expect(stats.ratio, closeTo(0.885, 0.01));
+      expect(stats.ratio, closeTo(0.875, 0.01));
       expect(stats.goldenRatioAchieved, isTrue);
     });
 
     test('borderline day just under 80%', () {
       final stats = DailyStats(
         date: DateTime(2026, 1, 5),
-        signalMinutes: 767, // Just under 80%
-        focusMinutes: 960,
+        signalMinutes: 383, // Just under 80%
+        focusMinutes: 480,
         completedTasks: 3,
       );
 

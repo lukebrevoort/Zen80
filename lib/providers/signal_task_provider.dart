@@ -34,6 +34,10 @@ class SignalTaskProvider extends ChangeNotifier {
   /// Can be used to prompt the user to continue or end
   void Function(SignalTask task, TimeSlot slot)? onTimerReachedEnd;
 
+  /// Callback for when user manually continues past planned end time
+  /// Can be used to cancel stale auto-end notifications
+  void Function(SignalTask task, TimeSlot slot)? onTimerContinued;
+
   /// Callback for when a task timer is force-stopped at midnight cutoff
   /// Can be used to show a notification explaining why the timer was stopped
   void Function(SignalTask task, TimeSlot slot)? onMidnightCutoff;
@@ -1141,9 +1145,15 @@ class SignalTaskProvider extends ChangeNotifier {
     final task = getTask(taskId);
     if (task == null) return;
 
-    final slot = task.timeSlots.firstWhere((s) => s.id == slotId);
+    final slotIndex = task.timeSlots.indexWhere((s) => s.id == slotId);
+    if (slotIndex == -1) return;
+
+    final slot = task.timeSlots[slotIndex];
     slot.continueTimer();
     await updateTask(task);
+
+    final continuedSlot = task.timeSlots[slotIndex];
+    onTimerContinued?.call(task, continuedSlot);
   }
 
   // ============ History ============

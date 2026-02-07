@@ -1532,14 +1532,8 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
     final percentage = (ratio * 100).toInt();
     final schedule = settingsProvider.todaySchedule;
 
-    // Calculate display start hour using effective start (respects early starts)
-    // Use the earlier of: configured focus start OR any early start override
-    final effectiveStartHour = settingsProvider.getEffectiveStartHourForDate(
-      _today,
-    );
-    final displayStartHour = effectiveStartHour > 0
-        ? effectiveStartHour - 1
-        : 0;
+    // Default calendar view starts at 8 AM
+    const displayStartHour = 8;
 
     return Scaffold(
       backgroundColor: Colors.white,

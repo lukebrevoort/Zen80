@@ -10,7 +10,7 @@ import 'onboarding/first_task_screen.dart';
 
 /// Enhanced Onboarding Flow - 4 step process:
 /// 1. Philosophy Screen - Introduce Signal/Noise concept
-/// 2. Schedule Setup - Configure focus times per day
+/// 2. Focus Goal - Set daily focus hours
 /// 3. Timezone - Select timezone (optional, auto-detect available)
 /// 4. First Task - Create first Signal task with guided walkthrough
 class OnboardingScreen extends StatefulWidget {
@@ -99,7 +99,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         return ScheduleSetupScreen(
           onContinue: _nextStep,
           onBack: _previousStep,
-          onSkip: _nextStep, // Allow skipping schedule setup
+          onSkip: _nextStep, // Allow skipping focus goal setup
         );
       case 2:
         return Consumer<SettingsProvider>(

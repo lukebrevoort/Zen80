@@ -77,6 +77,12 @@ class SettingsProvider extends ChangeNotifier {
   /// Whether next task reminders are enabled
   bool get enableNextTaskReminders => _settings.enableNextTaskReminders;
 
+  /// Target focus hours per day
+  int get focusHoursPerDay => _settings.focusHoursPerDay;
+
+  /// Target focus minutes per day
+  int get focusMinutesPerDay => _settings.focusHoursPerDay * 60;
+
   /// Today's schedule
   DaySchedule get todaySchedule => _settings.todaySchedule;
 
@@ -206,7 +212,45 @@ class SettingsProvider extends ChangeNotifier {
   /// Load settings from storage
   Future<void> _loadSettings() async {
     _settings = _storageService.getUserSettings();
+    await _ensureFullDaySchedule();
     notifyListeners();
+  }
+
+  Future<void> _ensureFullDaySchedule() async {
+    final fullDaySchedule = _buildFullDaySchedule();
+    var needsUpdate = false;
+
+    for (final entry in fullDaySchedule.entries) {
+      final current = _settings.weeklySchedule[entry.key];
+      if (current == null ||
+          current.activeStartHour != entry.value.activeStartHour ||
+          current.activeStartMinute != entry.value.activeStartMinute ||
+          current.activeEndHour != entry.value.activeEndHour ||
+          current.activeEndMinute != entry.value.activeEndMinute ||
+          current.isActiveDay != entry.value.isActiveDay) {
+        needsUpdate = true;
+        break;
+      }
+    }
+
+    if (needsUpdate) {
+      _settings = _settings.copyWith(weeklySchedule: fullDaySchedule);
+      await _saveSettings();
+    }
+  }
+
+  Map<int, DaySchedule> _buildFullDaySchedule() {
+    return {
+      for (var day = 1; day <= 7; day++)
+        day: DaySchedule(
+          dayOfWeek: day,
+          activeStartHour: 0,
+          activeStartMinute: 0,
+          activeEndHour: 23,
+          activeEndMinute: 59,
+          isActiveDay: true,
+        ),
+    };
   }
 
   /// Refresh settings from storage
@@ -297,6 +341,13 @@ class SettingsProvider extends ChangeNotifier {
   /// Update next task reminders setting
   Future<void> setEnableNextTaskReminders(bool value) async {
     _settings = _settings.copyWith(enableNextTaskReminders: value);
+    await _saveSettings();
+  }
+
+  /// Update focus hours per day
+  Future<void> setFocusHoursPerDay(int hours) async {
+    final clamped = hours.clamp(1, 12);
+    _settings = _settings.copyWith(focusHoursPerDay: clamped);
     await _saveSettings();
   }
 
