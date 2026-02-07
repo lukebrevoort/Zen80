@@ -181,6 +181,15 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
       minutesBeforeStart: _settingsProvider.notificationBeforeStartMinutes,
       minutesBeforeEnd: _settingsProvider.notificationBeforeEndMinutes,
     );
+
+    // Schedule auto-end + next-task notifications with the OS so they still fire
+    // even if the app is backgrounded/suspended by iOS.
+    NotificationService().scheduleActiveTimerNotifications(
+      activeTask: activeTask,
+      activeSlot: slot,
+      allTasks: _signalTaskProvider.tasks,
+      enableNextTaskReminders: _settingsProvider.enableNextTaskReminders,
+    );
   }
 
   /// Handle when a timer stops - update notification state

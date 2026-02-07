@@ -52,6 +52,8 @@ class NotificationService {
   static const int _taskAutoEndedBaseId = 400; // +taskId.hashCode
   static const int _nextTaskReminderBaseId = 500; // +taskId.hashCode
   static const int _rolloverMorningBaseId = 600; // +taskId.hashCode
+  static const Duration _autoEndedNotificationDelay = Duration(seconds: 20);
+  static const Duration _nextTaskNotificationDelay = Duration(seconds: 5);
 
   /// Initialize the notification service
   Future<void> initialize() async {
@@ -273,6 +275,69 @@ class NotificationService {
     await _notifications.cancel(_taskStartPromptBaseId + slotIdHash);
     await _notifications.cancel(_taskEndingSoonBaseId + slotIdHash);
     await _notifications.cancel(_taskAutoEndedBaseId + slotIdHash);
+    await _notifications.cancel(_nextTaskReminderBaseId + slotIdHash);
+  }
+
+  /// Schedule completion + next-task notifications for an active timer.
+  ///
+  /// These are scheduled with the OS so they still fire when the app is backgrounded.
+  Future<void> scheduleActiveTimerNotifications({
+    required SignalTask activeTask,
+    required TimeSlot activeSlot,
+    required List<SignalTask> allTasks,
+    required bool enableNextTaskReminders,
+  }) async {
+    // Clear any stale notifications for this slot before re-scheduling.
+    await cancelSlotNotifications(activeSlot.id);
+
+    // Only schedule for slots that should auto-end.
+    if (!activeSlot.autoEnd || activeSlot.wasManualContinue) return;
+    if (activeSlot.isDiscarded || activeSlot.isCompleted) return;
+
+    final now = DateTime.now();
+    final completionTime = activeSlot.plannedEndTime.add(
+      _autoEndedNotificationDelay,
+    );
+    if (completionTime.isBefore(now)) return;
+
+    final slotIdHash = activeSlot.id.hashCode.abs() % 10000;
+    final plannedDuration = activeSlot.plannedEndTime.difference(
+      activeSlot.plannedStartTime,
+    );
+
+    await _scheduleNotification(
+      id: _taskAutoEndedBaseId + slotIdHash,
+      title: '${activeTask.title} session complete! 🎯',
+      body: 'Great work! You focused for ${_formatDuration(plannedDuration)}.',
+      scheduledTime: completionTime,
+      isTimeSensitive: true,
+    );
+
+    if (!enableNextTaskReminders) return;
+
+    final nextSlotInfo = _findNextSlotAfter(
+      allTasks: allTasks,
+      after: activeSlot.plannedEndTime,
+      excludingSlotId: activeSlot.id,
+    );
+    if (nextSlotInfo == null) return;
+
+    final nextSlot = nextSlotInfo.slot;
+    final minutesUntilNext = nextSlot.plannedStartTime
+        .difference(activeSlot.plannedEndTime)
+        .inMinutes;
+    final startLabel = _formatClockTime(nextSlot.plannedStartTime);
+    final nextBody = minutesUntilNext > 0
+        ? 'Your next Signal task starts in $minutesUntilNext minutes at $startLabel.'
+        : 'Your next Signal task starts at $startLabel.';
+
+    await _scheduleNotification(
+      id: _nextTaskReminderBaseId + slotIdHash,
+      title: 'Up next: ${nextSlotInfo.task.title}',
+      body: nextBody,
+      scheduledTime: completionTime.add(_nextTaskNotificationDelay),
+      isTimeSensitive: true,
+    );
   }
 
   /// Cancel all notifications for a task
@@ -773,6 +838,40 @@ class NotificationService {
     }
   }
 
+  _TaskAndSlot? _findNextSlotAfter({
+    required List<SignalTask> allTasks,
+    required DateTime after,
+    required String excludingSlotId,
+  }) {
+    _TaskAndSlot? next;
+
+    for (final task in allTasks) {
+      for (final slot in task.timeSlots) {
+        if (slot.id == excludingSlotId ||
+            slot.isDiscarded ||
+            slot.isCompleted ||
+            slot.hasStarted) {
+          continue;
+        }
+        if (!slot.plannedStartTime.isAfter(after)) continue;
+
+        if (next == null ||
+            slot.plannedStartTime.isBefore(next.slot.plannedStartTime)) {
+          next = _TaskAndSlot(task: task, slot: slot);
+        }
+      }
+    }
+
+    return next;
+  }
+
+  String _formatClockTime(DateTime dateTime) {
+    final hour = dateTime.hour % 12 == 0 ? 12 : dateTime.hour % 12;
+    final minute = dateTime.minute.toString().padLeft(2, '0');
+    final period = dateTime.hour >= 12 ? 'PM' : 'AM';
+    return '$hour:$minute $period';
+  }
+
   /// Handle notification tap
   void _onNotificationTapped(NotificationResponse response) {
     // Handle action buttons
@@ -808,4 +907,11 @@ class NotificationService {
     _noiseCheckTimer?.cancel();
     _inactivityCheckTimer?.cancel();
   }
+}
+
+class _TaskAndSlot {
+  final SignalTask task;
+  final TimeSlot slot;
+
+  const _TaskAndSlot({required this.task, required this.slot});
 }
