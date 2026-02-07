@@ -140,6 +140,7 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
     _signalTaskProvider.onTimerStop = _handleTimerStopped;
     _signalTaskProvider.onAutoEnd = _handleTaskAutoEnded;
     _signalTaskProvider.onTimerReachedEnd = _handleTimerReachedEnd;
+    _signalTaskProvider.onTimerContinued = _handleTimerContinued;
     _signalTaskProvider.onMidnightCutoff = _handleMidnightCutoff;
 
     // Wire up sync callback so remote changes refresh SignalTaskProvider
@@ -180,6 +181,15 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
       enableEndReminders: _settingsProvider.enableEndReminders,
       minutesBeforeStart: _settingsProvider.notificationBeforeStartMinutes,
       minutesBeforeEnd: _settingsProvider.notificationBeforeEndMinutes,
+    );
+
+    // Schedule auto-end + next-task notifications with the OS so they still fire
+    // even if the app is backgrounded/suspended by iOS.
+    NotificationService().scheduleActiveTimerNotifications(
+      activeTask: activeTask,
+      activeSlot: slot,
+      allTasks: _signalTaskProvider.tasks,
+      enableNextTaskReminders: _settingsProvider.enableNextTaskReminders,
     );
   }
 
@@ -229,6 +239,12 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
     debugPrint(
       'Timer reached end for ${task.title} - user can continue or end',
     );
+  }
+
+  /// Handle when user manually continues a timer past planned end time
+  void _handleTimerContinued(SignalTask task, TimeSlot slot) {
+    // User opted to continue, so planned-end auto notifications are now stale.
+    NotificationService().cancelSlotNotifications(slot.id);
   }
 
   /// Handle when a task is force-stopped at the midnight cutoff (11:59 PM)
