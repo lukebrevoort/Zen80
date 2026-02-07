@@ -1,20 +1,6 @@
 #!/bin/sh
-set -e
+set -euo pipefail
 
-REPO_ROOT="${CI_PRIMARY_REPOSITORY_PATH:-$(pwd)}"
-FLUTTER_ROOT="${FLUTTER_ROOT:-$HOME/flutter}"
-
-if [ ! -d "$FLUTTER_ROOT" ]; then
-  git clone https://github.com/flutter/flutter.git -b stable "$FLUTTER_ROOT"
-fi
-
-export PATH="$FLUTTER_ROOT/bin:$PATH"
-
-flutter --version
-flutter precache --ios
-
-cd "$REPO_ROOT"
-flutter pub get
-
-cd "$REPO_ROOT/ios"
-pod install
+# Keep this wrapper for local/legacy CI usage.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+exec "$SCRIPT_DIR/ci_scripts/ci_post_clone.sh"
