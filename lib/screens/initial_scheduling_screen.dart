@@ -142,25 +142,16 @@ class _InitialSchedulingScreenState extends State<InitialSchedulingScreen> {
   }
 
   /// Calculate projected signal ratio based on scheduled tasks
+  /// Projected ratio = total estimated signal minutes / daily focus hours goal
   double _getProjectedRatio(
     SignalTaskProvider taskProvider,
     SettingsProvider settingsProvider,
   ) {
-    final schedule = settingsProvider.todaySchedule;
-
-    // Use effective focus window if the user started early.
-    // This affects the denominator (total focus window minutes).
-    final effectiveStart = settingsProvider.getEffectiveStartTime(_today);
-    final effectiveEnd = schedule.getEndTimeForDate(_today);
-
-    final activeMinutes = effectiveStart != null
-        ? effectiveEnd.difference(effectiveStart).inMinutes
-        : schedule.activeMinutes;
-
-    if (activeMinutes <= 0) return 0;
+    final focusMinutes = settingsProvider.focusMinutesPerDay;
+    if (focusMinutes <= 0) return 0;
 
     final signalMinutes = taskProvider.totalEstimatedMinutes;
-    return (signalMinutes / activeMinutes).clamp(0.0, 1.0);
+    return (signalMinutes / focusMinutes).clamp(0.0, 1.0);
   }
 
   bool get _allTasksScheduled {
