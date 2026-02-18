@@ -840,6 +840,11 @@ class _EditSignalTaskScreenState extends State<EditSignalTaskScreen> {
   }
 
   Future<void> _editTimeSlot(TimeSlot slot) async {
+    if (slot.hasStarted) {
+      _showLockedSlotMessage();
+      return;
+    }
+
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(slot.plannedStartTime),
@@ -876,10 +881,30 @@ class _EditSignalTaskScreenState extends State<EditSignalTaskScreen> {
   }
 
   void _removeTimeSlot(int index) {
+    final slot = _timeSlots[index];
+    if (slot.hasStarted) {
+      _showLockedSlotMessage();
+      return;
+    }
+
     setState(() {
       _timeSlots.removeAt(index);
     });
     _markChanged();
+  }
+
+  void _showLockedSlotMessage() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'This time slot has tracked work and cannot be changed.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.orange.shade700,
+      ),
+    );
   }
 
   DateTime _roundToNearestQuarterHour(DateTime dateTime) {

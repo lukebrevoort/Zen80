@@ -526,9 +526,10 @@ class SignalTaskProvider extends ChangeNotifier {
   }
 
   /// Remove a time slot from a task
-  Future<void> removeTimeSlot(String taskId, String slotId) async {
+  /// Returns true when removal succeeds, false otherwise.
+  Future<bool> removeTimeSlot(String taskId, String slotId) async {
     final task = getTask(taskId);
-    if (task == null) return;
+    if (task == null) return false;
 
     // Get the slot before removing to check for calendar event
     final slot = task.timeSlots.cast<TimeSlot?>().firstWhere(
@@ -536,12 +537,17 @@ class SignalTaskProvider extends ChangeNotifier {
       orElse: () => null,
     );
 
+    if (slot == null) return false;
+    if (slot.hasStarted) {
+      debugPrint('Attempted to remove time slot with tracked time: $slotId');
+      return false;
+    }
+
     // Queue calendar delete if connected and slot has a Signal-created calendar event
     // Note: We only delete Signal-created events (googleCalendarEventId), NOT imported
     // external events (externalCalendarEventId). Imported events existed before Signal
     // linked to them, so removing the slot just un-links - it doesn't delete the original.
-    if (slot != null &&
-        slot.googleCalendarEventId != null &&
+    if (slot.googleCalendarEventId != null &&
         GoogleCalendarService().isConnected) {
       await SyncService().queueDeleteEvent(
         taskId: taskId,
@@ -552,6 +558,7 @@ class SignalTaskProvider extends ChangeNotifier {
 
     task.removeTimeSlot(slotId);
     await updateTask(task);
+    return true;
   }
 
   /// Update a time slot's times
