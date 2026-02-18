@@ -1218,7 +1218,11 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
       debugPrint('Failed to cancel notifications: \$e');
     }
 
-    await provider.removeTimeSlot(task.id, slot.id);
+    final removed = await provider.removeTimeSlot(task.id, slot.id);
+    if (!removed) {
+      _showLockedSlotMessage();
+      return;
+    }
 
     // Update calendar
     _eventController.remove(event);
