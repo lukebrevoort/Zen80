@@ -536,12 +536,17 @@ class SignalTaskProvider extends ChangeNotifier {
       orElse: () => null,
     );
 
+    if (slot == null) return;
+    if (slot.hasStarted) {
+      debugPrint('Attempted to remove time slot with tracked time: $slotId');
+      return;
+    }
+
     // Queue calendar delete if connected and slot has a Signal-created calendar event
     // Note: We only delete Signal-created events (googleCalendarEventId), NOT imported
     // external events (externalCalendarEventId). Imported events existed before Signal
     // linked to them, so removing the slot just un-links - it doesn't delete the original.
-    if (slot != null &&
-        slot.googleCalendarEventId != null &&
+    if (slot.googleCalendarEventId != null &&
         GoogleCalendarService().isConnected) {
       await SyncService().queueDeleteEvent(
         taskId: taskId,

@@ -1104,6 +1104,18 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
     final settingsProvider = context.read<SettingsProvider>();
     final schedule = settingsProvider.todaySchedule;
 
+    final slot = task.timeSlots.firstWhere(
+      (s) =>
+          s.plannedStartTime.hour == event.startTime!.hour &&
+          s.plannedStartTime.minute == event.startTime!.minute,
+      orElse: () => throw StateError('Slot not found for reschedule'),
+    );
+
+    if (slot.hasStarted) {
+      _showLockedSlotMessage();
+      return;
+    }
+
     final pickedTime = await showTimePicker(
       context: context,
       initialTime: TimeOfDay.fromDateTime(event.startTime!),
@@ -1132,14 +1144,6 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
     }
 
     final provider = context.read<SignalTaskProvider>();
-
-    // Find and update the time slot
-    final slot = task.timeSlots.firstWhere(
-      (s) =>
-          s.plannedStartTime.hour == event.startTime!.hour &&
-          s.plannedStartTime.minute == event.startTime!.minute,
-      orElse: () => throw StateError('Slot not found for reschedule'),
-    );
 
     // Cancel existing notifications for this slot before updating
     try {
@@ -1202,6 +1206,11 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
       orElse: () => throw StateError('Slot not found for reschedule'),
     );
 
+    if (slot.hasStarted) {
+      _showLockedSlotMessage();
+      return;
+    }
+
     // Cancel notifications for this slot before removing
     try {
       await NotificationService().cancelSlotNotifications(slot.id);
@@ -1239,6 +1248,20 @@ class _SchedulingScreenState extends State<SchedulingScreen> {
 
   bool _isSameDay(DateTime a, DateTime b) {
     return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  void _showLockedSlotMessage() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text(
+          'This time slot has tracked work and cannot be changed.',
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Colors.orange.shade700,
+      ),
+    );
   }
 
   /// Check if a TimeOfDay is within active hours
