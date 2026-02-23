@@ -416,5 +416,71 @@ _Add questions here as they arise. Update with answers._
 
 ---
 
-_Last Updated: January 6, 2026_
+## PM Execution Plan: Smarter Auto-Detection Stop (Ad-hoc)
+
+### Context
+
+Ad-hoc sessions can overrun when users forget to stop timers, creating inflated work logs (often until midnight cutoff). We need a bounded continuation model that still lets users extend real work intentionally.
+
+### Architecture Decision
+
+- Ad-hoc session soft limit = `expectedDuration * 1.5`
+- At `T - 5m`, send a time-sensitive warning notification
+- If user taps Continue in-app, extend by `expectedDuration * 0.5`
+- Keep hard midnight cutoff as final safety net
+
+### Program and Phase DAG
+
+```text
+program.smart_auto_stop
+  ├─ phase.1_design_rules (SUCCESS required)
+  ├─ phase.2_provider_logic (depends on phase.1)
+  ├─ phase.3_notifications (depends on phase.2)
+  ├─ phase.4_ui_timer_flow (depends on phase.2)
+  └─ phase.5_verification_and_review (depends on phase.3 + phase.4)
+```
+
+### Required Gates
+
+- Verification Gate: `@verifier` confirms all acceptance criteria below
+- Final Review Gate: no phase marked `SUCCESS` until tests pass and notifier behavior is manually validated in simulator
+
+### Subagent Registry
+
+- Core: `@general`, `@verifier`, `@uiux`, `@oracle`
+- Project-specific: _none currently required_
+
+### Routing Matrix (`task_type x risk_level -> subagent`)
+
+- `provider_logic x low/medium -> @general`
+- `notification_scheduling x medium -> @general`
+- `timer_ui_interaction x medium -> @uiux`
+- `flaky_timing_debug x high -> @oracle`
+- `acceptance_validation x any -> @verifier`
+
+### Delegation Triggers
+
+- Use `@oracle` when timer state diverges between foreground/background
+- Use `@uiux` when changing timer modal affordances or notification copy UX
+- Use `@verifier` for final phase and any regression concerns around calendar sync
+
+### Verification Owner
+
+- `@verifier` owns final acceptance checks for this feature
+
+### Pruning Rule
+
+- If smart auto-stop is folded into generic timer policies and no timing-specific debugging appears for 2 consecutive iterations, keep only core agents and remove any temporary specialist routing.
+
+### Acceptance Criteria for PM
+
+1. New ad-hoc slots initialize with a 150% auto-stop window
+2. Active ad-hoc session sends a 5-minute warning before auto-stop
+3. Continue action extends stop window by 50% of expected duration
+4. No regression to pre-scheduled slot calendar behavior
+5. Midnight cutoff still force-stops all timers at 23:59
+
+---
+
+_Last Updated: February 23, 2026_
 _Document Owner: Architect Agent_

@@ -305,6 +305,20 @@ class NotificationService {
       activeSlot.plannedStartTime,
     );
 
+    final endingSoonTime = activeSlot.plannedEndTime.subtract(
+      const Duration(minutes: 5),
+    );
+    if (endingSoonTime.isAfter(now)) {
+      await _scheduleNotification(
+        id: _taskEndingSoonBaseId + slotIdHash,
+        title: '${activeTask.title} almost done',
+        body: 'Auto-stop is approaching. Continue in-app to add 50% more time.',
+        scheduledTime: endingSoonTime,
+        category: 'taskEnding',
+        isTimeSensitive: true,
+      );
+    }
+
     await _scheduleNotification(
       id: _taskAutoEndedBaseId + slotIdHash,
       title: '${activeTask.title} session complete! 🎯',
