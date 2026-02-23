@@ -9,6 +9,7 @@ import '../models/sub_task.dart';
 import '../models/time_slot.dart';
 import '../providers/signal_task_provider.dart';
 import '../providers/settings_provider.dart';
+import '../services/notification_service.dart';
 import '../widgets/tags/tag_selector.dart';
 import '../widgets/subtasks/subtask_list.dart';
 import '../widgets/common/time_estimate_input.dart';
@@ -116,6 +117,7 @@ class _EditSignalTaskScreenState extends State<EditSignalTaskScreen> {
       );
 
       await provider.updateTask(updatedTask);
+      await _refreshTaskNotifications();
 
       if (mounted) {
         Navigator.of(context).pop(true); // Return true to indicate success
@@ -164,6 +166,7 @@ class _EditSignalTaskScreenState extends State<EditSignalTaskScreen> {
       try {
         final provider = context.read<SignalTaskProvider>();
         await provider.deleteTask(widget.taskId);
+        await _refreshTaskNotifications();
 
         if (mounted) {
           Navigator.of(context).pop(true);
@@ -205,6 +208,21 @@ class _EditSignalTaskScreenState extends State<EditSignalTaskScreen> {
     );
 
     return result ?? false;
+  }
+
+  Future<void> _refreshTaskNotifications() async {
+    if (!mounted) return;
+
+    final taskProvider = context.read<SignalTaskProvider>();
+    final settingsProvider = context.read<SettingsProvider>();
+
+    await NotificationService().refreshTaskNotifications(
+      tasks: taskProvider.tasks,
+      enableStartReminders: settingsProvider.enableStartReminders,
+      enableEndReminders: settingsProvider.enableEndReminders,
+      minutesBeforeStart: settingsProvider.notificationBeforeStartMinutes,
+      minutesBeforeEnd: settingsProvider.notificationBeforeEndMinutes,
+    );
   }
 
   @override
