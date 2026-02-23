@@ -216,13 +216,17 @@ class _EditSignalTaskScreenState extends State<EditSignalTaskScreen> {
     final taskProvider = context.read<SignalTaskProvider>();
     final settingsProvider = context.read<SettingsProvider>();
 
-    await NotificationService().refreshTaskNotifications(
-      tasks: taskProvider.tasks,
-      enableStartReminders: settingsProvider.enableStartReminders,
-      enableEndReminders: settingsProvider.enableEndReminders,
-      minutesBeforeStart: settingsProvider.notificationBeforeStartMinutes,
-      minutesBeforeEnd: settingsProvider.notificationBeforeEndMinutes,
-    );
+    try {
+      await NotificationService().refreshTaskNotifications(
+        tasks: taskProvider.tasks,
+        enableStartReminders: settingsProvider.enableStartReminders,
+        enableEndReminders: settingsProvider.enableEndReminders,
+        minutesBeforeStart: settingsProvider.notificationBeforeStartMinutes,
+        minutesBeforeEnd: settingsProvider.notificationBeforeEndMinutes,
+      );
+    } catch (e) {
+      debugPrint('Notification refresh failed (non-fatal): $e');
+    }
   }
 
   @override
