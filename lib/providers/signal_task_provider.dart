@@ -664,6 +664,23 @@ class SignalTaskProvider extends ChangeNotifier {
   /// Commitment threshold for long tasks (>= 2 hours)
   static const Duration longTaskCommitmentThreshold = Duration(minutes: 10);
 
+  /// Smart auto-stop baseline for ad-hoc sessions.
+  ///
+  /// Uses 150% of the expected session duration so users get reasonable
+  /// overrun room without letting forgotten timers run indefinitely.
+  int _smartAutoStopMinutes(int expectedMinutes) {
+    final safeExpected = expectedMinutes > 0 ? expectedMinutes : 30;
+    return (safeExpected * 1.5).ceil();
+  }
+
+  /// Extra time granted when a user chooses to continue.
+  ///
+  /// Each continue adds 50% of the expected task duration.
+  int _continuationExtensionMinutes(int expectedMinutes) {
+    final safeExpected = expectedMinutes > 0 ? expectedMinutes : 30;
+    return (safeExpected * 0.5).ceil();
+  }
+
   /// Start the timer for a time slot
   /// Handles session merging: gaps < 15 min continue same slot, gaps >= 15 min create new slot
   Future<void> startTimeSlot(String taskId, String slotId) async {
@@ -810,7 +827,9 @@ class SignalTaskProvider extends ChangeNotifier {
         final newSlot = TimeSlot(
           id: _uuid.v4(),
           plannedStartTime: now,
-          plannedEndTime: now.add(Duration(minutes: remainingTime)),
+          plannedEndTime: now.add(
+            Duration(minutes: _smartAutoStopMinutes(remainingTime)),
+          ),
           linkedSubTaskIds: preferredSlot.linkedSubTaskIds,
         );
         task.addTimeSlot(newSlot);
@@ -821,7 +840,9 @@ class SignalTaskProvider extends ChangeNotifier {
       final newSlot = TimeSlot(
         id: _uuid.v4(),
         plannedStartTime: now,
-        plannedEndTime: now.add(Duration(minutes: task.estimatedMinutes)),
+        plannedEndTime: now.add(
+          Duration(minutes: _smartAutoStopMinutes(task.estimatedMinutes)),
+        ),
       );
       task.addTimeSlot(newSlot);
       slotIdToStart = newSlot.id;
@@ -866,7 +887,9 @@ class SignalTaskProvider extends ChangeNotifier {
           final newSlot = TimeSlot(
             id: _uuid.v4(),
             plannedStartTime: now,
-            plannedEndTime: now.add(Duration(minutes: remainingTime)),
+            plannedEndTime: now.add(
+              Duration(minutes: _smartAutoStopMinutes(remainingTime)),
+            ),
           );
           task.addTimeSlot(newSlot);
           slotIdToStart = newSlot.id;
@@ -879,7 +902,9 @@ class SignalTaskProvider extends ChangeNotifier {
         final newSlot = TimeSlot(
           id: _uuid.v4(),
           plannedStartTime: now,
-          plannedEndTime: now.add(Duration(minutes: remainingTime)),
+          plannedEndTime: now.add(
+            Duration(minutes: _smartAutoStopMinutes(remainingTime)),
+          ),
         );
         task.addTimeSlot(newSlot);
         slotIdToStart = newSlot.id;
@@ -1209,7 +1234,25 @@ class SignalTaskProvider extends ChangeNotifier {
     if (slotIndex == -1) return;
 
     final slot = task.timeSlots[slotIndex];
-    slot.continueTimer();
+    final isAdHocSlot =
+        slot.googleCalendarEventId == null &&
+        slot.externalCalendarEventId == null;
+
+    if (isAdHocSlot) {
+      final extensionMinutes = _continuationExtensionMinutes(
+        task.estimatedMinutes,
+      );
+      task.timeSlots[slotIndex] = slot.copyWith(
+        plannedEndTime: slot.plannedEndTime.add(
+          Duration(minutes: extensionMinutes),
+        ),
+        autoEnd: true,
+        wasManualContinue: false,
+      );
+    } else {
+      slot.continueTimer();
+    }
+
     await updateTask(task);
 
     final continuedSlot = task.timeSlots[slotIndex];

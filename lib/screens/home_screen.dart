@@ -851,13 +851,15 @@ class _DashboardTaskCard extends StatelessWidget {
         // This prevents the auto-end checker from immediately stopping the timer
         if (preferredSlot.isPastPlannedEnd) {
           final originalDuration = preferredSlot.plannedDuration;
-          final newEndTime = now.add(originalDuration);
+          final smartDurationMinutes = (originalDuration.inMinutes * 1.5)
+              .ceil();
+          final newEndTime = now.add(Duration(minutes: smartDurationMinutes));
           await taskProvider.updateTimeSlot(
             task.id,
             preferredSlot.id,
             startTime: now,
             endTime: newEndTime,
-            autoEnd: false, // Disable auto-end for past-due slots
+            autoEnd: true,
           );
         }
       }

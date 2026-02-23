@@ -243,8 +243,14 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
 
   /// Handle when user manually continues a timer past planned end time
   void _handleTimerContinued(SignalTask task, TimeSlot slot) {
-    // User opted to continue, so planned-end auto notifications are now stale.
-    NotificationService().cancelSlotNotifications(slot.id);
+    // User opted to continue, so re-schedule active timer notifications
+    // against the updated planned end time.
+    NotificationService().scheduleActiveTimerNotifications(
+      activeTask: task,
+      activeSlot: slot,
+      allTasks: _signalTaskProvider.tasks,
+      enableNextTaskReminders: _settingsProvider.enableNextTaskReminders,
+    );
   }
 
   /// Handle when a task is force-stopped at the midnight cutoff (11:59 PM)
