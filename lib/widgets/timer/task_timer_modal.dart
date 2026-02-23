@@ -111,11 +111,14 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
     Navigator.of(context).pop();
   }
 
-  void _continueTimer() {
+  Future<void> _continueTimer() async {
     final provider = context.read<SignalTaskProvider>();
-    provider.continueTimeSlot(widget.task.id, widget.activeSlot.id);
+    await provider.continueTimeSlot(widget.task.id, widget.activeSlot.id);
+
+    if (!mounted) return;
+
     setState(() {
-      _isPastPlannedEnd = false; // Hide the warning after continuing
+      _calculateElapsed();
     });
   }
 

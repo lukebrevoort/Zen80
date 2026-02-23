@@ -1242,13 +1242,17 @@ class SignalTaskProvider extends ChangeNotifier {
       final extensionMinutes = _continuationExtensionMinutes(
         task.estimatedMinutes,
       );
-      task.timeSlots[slotIndex] = slot.copyWith(
-        plannedEndTime: slot.plannedEndTime.add(
-          Duration(minutes: extensionMinutes),
-        ),
-        autoEnd: true,
-        wasManualContinue: false,
+      final now = DateTime.now();
+      final continuationAnchor = slot.plannedEndTime.isAfter(now)
+          ? slot.plannedEndTime
+          : now;
+
+      // Mutate in place so active modal references stay fresh.
+      slot.plannedEndTime = continuationAnchor.add(
+        Duration(minutes: extensionMinutes),
       );
+      slot.autoEnd = true;
+      slot.wasManualContinue = false;
     } else {
       slot.continueTimer();
     }
