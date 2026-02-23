@@ -4,6 +4,7 @@ import 'package:uuid/uuid.dart';
 import '../models/models.dart';
 import '../services/storage_service.dart';
 import '../services/google_calendar_service.dart';
+import '../services/notification_service.dart';
 import '../services/sync_service.dart';
 
 /// Provider for managing Signal tasks (v2)
@@ -317,6 +318,10 @@ class SignalTaskProvider extends ChangeNotifier {
 
     final index = _tasks.indexWhere((t) => t.id == task.id);
     if (index != -1) {
+      await _cancelStaleSlotNotifications(
+        previousTask: _tasks[index],
+        updatedTask: task,
+      );
       _tasks[index] = task;
       _updateActiveTask();
       notifyListeners();
@@ -328,6 +333,16 @@ class SignalTaskProvider extends ChangeNotifier {
   Future<void> deleteTask(String taskId) async {
     // Get the task before deleting to access its time slots
     final task = getTask(taskId);
+
+    // Always clear local notifications for this task before deleting.
+    // This prevents stale reminders firing for removed tasks.
+    if (task != null) {
+      try {
+        await NotificationService().cancelTaskNotifications(task);
+      } catch (e) {
+        debugPrint('Failed to cancel task notifications for delete: $e');
+      }
+    }
 
     // Delete Google Calendar events for all time slots that have them
     // Note: We only delete Signal-created events (googleCalendarEventId), NOT imported
@@ -543,6 +558,12 @@ class SignalTaskProvider extends ChangeNotifier {
       return false;
     }
 
+    try {
+      await NotificationService().cancelSlotNotifications(slotId);
+    } catch (e) {
+      debugPrint('Failed to cancel slot notifications for remove: $e');
+    }
+
     // Queue calendar delete if connected and slot has a Signal-created calendar event
     // Note: We only delete Signal-created events (googleCalendarEventId), NOT imported
     // external events (externalCalendarEventId). Imported events existed before Signal
@@ -559,6 +580,38 @@ class SignalTaskProvider extends ChangeNotifier {
     task.removeTimeSlot(slotId);
     await updateTask(task);
     return true;
+  }
+
+  Future<void> _cancelStaleSlotNotifications({
+    required SignalTask previousTask,
+    required SignalTask updatedTask,
+  }) async {
+    final updatedSlotsById = {
+      for (final slot in updatedTask.timeSlots) slot.id: slot,
+    };
+
+    for (final previousSlot in previousTask.timeSlots) {
+      final updatedSlot = updatedSlotsById[previousSlot.id];
+
+      final wasRemoved = updatedSlot == null;
+      final timeChanged =
+          updatedSlot != null &&
+          (previousSlot.plannedStartTime != updatedSlot.plannedStartTime ||
+              previousSlot.plannedEndTime != updatedSlot.plannedEndTime);
+      final becameInactive =
+          updatedSlot != null &&
+          (updatedSlot.isDiscarded || updatedSlot.isCompleted);
+
+      if (!wasRemoved && !timeChanged && !becameInactive) continue;
+
+      try {
+        await NotificationService().cancelSlotNotifications(previousSlot.id);
+      } catch (e) {
+        debugPrint(
+          'Failed to cancel stale slot notifications for ${previousSlot.id}: $e',
+        );
+      }
+    }
   }
 
   /// Update a time slot's times
