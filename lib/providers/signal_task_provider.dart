@@ -1258,6 +1258,9 @@ class SignalTaskProvider extends ChangeNotifier {
     // Recalculate timer state
     _updateActiveTask();
 
+    // Ensure any overdue timers are auto-ended immediately on resume
+    _checkAutoEnd();
+
     // Check for and clean up any missed slots
     // This catches slots that became "missed" while app was in background
     cleanupMissedSlots();
