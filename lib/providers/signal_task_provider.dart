@@ -72,9 +72,11 @@ class SignalTaskProvider extends ChangeNotifier {
   }
 
   /// Check if any active timer should be auto-ended
-  void _checkAutoEnd() {
+  void _checkAutoEnd({bool checkMissedSlots = true}) {
     // Also check for missed slots (throttled to every 2 minutes)
-    _checkMissedSlotsThrottled();
+    if (checkMissedSlots) {
+      _checkMissedSlotsThrottled();
+    }
 
     if (_activeTask == null) return;
 
@@ -1304,6 +1306,9 @@ class SignalTaskProvider extends ChangeNotifier {
   void onAppResumed() {
     // Recalculate timer state
     _updateActiveTask();
+
+    // Ensure any overdue timers are auto-ended immediately on resume
+    _checkAutoEnd(checkMissedSlots: false);
 
     // Check for and clean up any missed slots
     // This catches slots that became "missed" while app was in background
