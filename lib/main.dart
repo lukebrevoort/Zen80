@@ -143,6 +143,10 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
     _signalTaskProvider.onTimerContinued = _handleTimerContinued;
     _signalTaskProvider.onMidnightCutoff = _handleMidnightCutoff;
 
+    NotificationService().onEndActionRequested = _handleNotificationEndAction;
+    NotificationService().onContinueActionRequested =
+        _handleNotificationContinueAction;
+
     // Wire up sync callback so remote changes refresh SignalTaskProvider
     _calendarProvider.setOnSignalTasksChanged(() {
       _signalTaskProvider.refresh();
@@ -274,6 +278,20 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
     debugPrint(
       'Midnight cutoff: Force-stopped "${task.title}" to prevent overnight tracking',
     );
+  }
+
+  Future<void> _handleNotificationEndAction(
+    String taskId,
+    String slotId,
+  ) async {
+    await _signalTaskProvider.stopTimeSlot(taskId, slotId, forceKeep: true);
+  }
+
+  Future<void> _handleNotificationContinueAction(
+    String taskId,
+    String slotId,
+  ) async {
+    await _signalTaskProvider.continueTimeSlot(taskId, slotId);
   }
 
   /// Check if there's a next task scheduled and show reminder
@@ -448,8 +466,9 @@ class _Zen80AppState extends State<Zen80App> with WidgetsBindingObserver {
         });
         break;
       case AppLifecycleState.paused:
-        // App going to background - nothing special needed
-        // Live Activities continue to show the timer
+      case AppLifecycleState.inactive:
+      case AppLifecycleState.detached:
+        _signalTaskProvider.onAppBackgrounded();
         break;
       default:
         break;
