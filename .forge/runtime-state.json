@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "parentIssueId": "25087639-34f9-4053-9845-466f8630a4ed",
+  "parentIssueIdentifier": "FOR-69",
+  "stagingBranch": "agent/FOR-69",
+  "subIssueIds": [
+    "e84a2415-50af-4083-8a75-c73bc330bcb7",
+    "6ae4cff0-fd6f-433b-90d2-4f8519fd0f64"
+  ],
+  "currentSubIssueIndex": 2,
+  "subIssues": {
+    "e84a2415-50af-4083-8a75-c73bc330bcb7": {
+      "issueId": "e84a2415-50af-4083-8a75-c73bc330bcb7",
+      "attempts": 1,
+      "status": "SUCCESS"
+    },
+    "6ae4cff0-fd6f-433b-90d2-4f8519fd0f64": {
+      "issueId": "6ae4cff0-fd6f-433b-90d2-4f8519fd0f64",
+      "attempts": 1,
+      "status": "SUCCESS"
+    }
+  },
+  "startedAt": "2026-03-05T03:42:17.484Z",
+  "updatedAt": "2026-03-05T03:50:12.956Z",
+  "heartbeatAt": "2026-03-05T03:50:12.956Z"
+}

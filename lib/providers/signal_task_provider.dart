@@ -301,6 +301,12 @@ class SignalTaskProvider extends ChangeNotifier {
           forceKeep: true,
           endedAt: midnightCutoffForSlot(activeSlot),
         );
+        final updatedTask = getTask(task.id);
+        final updatedSlot = updatedTask?.timeSlots.cast<TimeSlot?>().firstWhere(
+          (s) => s?.id == activeSlot.id,
+          orElse: () => null,
+        );
+        onMidnightCutoff?.call(updatedTask ?? task, updatedSlot ?? activeSlot);
         continue;
       }
 
@@ -315,6 +321,12 @@ class SignalTaskProvider extends ChangeNotifier {
         activeSlot.id,
         endedAt: activeSlot.plannedEndTime,
       );
+      final updatedTask = getTask(task.id);
+      final updatedSlot = updatedTask?.timeSlots.cast<TimeSlot?>().firstWhere(
+        (s) => s?.id == activeSlot.id,
+        orElse: () => null,
+      );
+      onAutoEnd?.call(updatedTask ?? task, updatedSlot ?? activeSlot);
     }
   }
 
