@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:signal_noise/models/time_slot.dart';
 import 'package:signal_noise/providers/signal_task_provider.dart';
 
 void main() {
@@ -31,43 +32,92 @@ void main() {
   });
 
   group('Midnight Cutoff Logic', () {
-    // Testing the midnight cutoff logic directly
-    // This verifies the business logic without requiring the full provider setup
+    test('midnight cutoff for anchor is 23:59 on same day', () {
+      final cutoff = SignalTaskProvider.midnightCutoffForAnchor(
+        DateTime(2026, 1, 5, 9, 30),
+      );
 
-    test('times before 23:59 are not past cutoff', () {
-      // Test various times during the day
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 8, 0)), isFalse);
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 12, 0)), isFalse);
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 18, 30)), isFalse);
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 22, 0)), isFalse);
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 23, 0)), isFalse);
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 23, 58)), isFalse);
+      expect(cutoff, equals(DateTime(2026, 1, 5, 23, 59)));
     });
 
-    test('exactly 23:59 is past cutoff', () {
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 23, 59)), isTrue);
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 23, 59, 30)), isTrue);
+    test('slot cutoff uses session start day when available', () {
+      final slot = TimeSlot(
+        id: 'slot-1',
+        plannedStartTime: DateTime(2026, 1, 5, 10, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 11, 0),
+        actualStartTime: DateTime(2026, 1, 5, 10, 5),
+        sessionStartTime: DateTime(2026, 1, 5, 10, 0),
+        isActive: true,
+      );
+
+      expect(
+        SignalTaskProvider.midnightCutoffForSlot(slot),
+        equals(DateTime(2026, 1, 5, 23, 59)),
+      );
     });
 
-    test('after 23:59 is past cutoff', () {
-      // Note: After 23:59 the next minute would be 00:00 (next day)
-      // But if somehow the timer check catches it just before midnight...
-      // The hour check handles this - hour > 23 would be impossible (max 23)
-      // So we just verify that 23:59+ is caught
-      expect(_isPastMidnightCutoff(DateTime(2026, 1, 5, 23, 59, 59)), isTrue);
+    test('slot cutoff falls back to actualStartTime when needed', () {
+      final slot = TimeSlot(
+        id: 'slot-2',
+        plannedStartTime: DateTime(2026, 1, 5, 10, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 11, 0),
+        actualStartTime: DateTime(2026, 1, 5, 10, 5),
+        isActive: true,
+      );
+
+      expect(
+        SignalTaskProvider.midnightCutoffForSlot(slot),
+        equals(DateTime(2026, 1, 5, 23, 59)),
+      );
+    });
+
+    test('slot cutoff falls back to plannedStartTime as last resort', () {
+      final slot = TimeSlot(
+        id: 'slot-3',
+        plannedStartTime: DateTime(2026, 1, 5, 10, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 11, 0),
+        isActive: true,
+      );
+
+      expect(
+        SignalTaskProvider.midnightCutoffForSlot(slot),
+        equals(DateTime(2026, 1, 5, 23, 59)),
+      );
     });
 
     test(
-      'early morning times (after midnight) are not past cutoff for current day',
+      'next-morning reopen still maps to prior-day cutoff (OS kill/restart)',
       () {
-        // 12:30 AM, 1:00 AM, etc. should NOT trigger cutoff
-        // These are the start of a NEW day, not the end of the previous day
-        expect(_isPastMidnightCutoff(DateTime(2026, 1, 6, 0, 0)), isFalse);
-        expect(_isPastMidnightCutoff(DateTime(2026, 1, 6, 0, 30)), isFalse);
-        expect(_isPastMidnightCutoff(DateTime(2026, 1, 6, 1, 0)), isFalse);
-        expect(_isPastMidnightCutoff(DateTime(2026, 1, 6, 2, 0)), isFalse);
+        final slot = TimeSlot(
+          id: 'slot-4',
+          plannedStartTime: DateTime(2026, 1, 5, 20, 0),
+          plannedEndTime: DateTime(2026, 1, 5, 21, 0),
+          sessionStartTime: DateTime(2026, 1, 5, 20, 0),
+          isActive: true,
+        );
+
+        final cutoff = SignalTaskProvider.midnightCutoffForSlot(slot);
+        final appResumeAfterRestart = DateTime(2026, 1, 6, 7, 30);
+
+        expect(cutoff, equals(DateTime(2026, 1, 5, 23, 59)));
+        expect(appResumeAfterRestart.isAfter(cutoff), isTrue);
       },
     );
+
+    test('manual stops before cutoff remain valid', () {
+      final slot = TimeSlot(
+        id: 'slot-5',
+        plannedStartTime: DateTime(2026, 1, 5, 20, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 21, 0),
+        sessionStartTime: DateTime(2026, 1, 5, 20, 0),
+        isActive: true,
+      );
+
+      final cutoff = SignalTaskProvider.midnightCutoffForSlot(slot);
+      final manualStopTime = DateTime(2026, 1, 5, 21, 30);
+
+      expect(manualStopTime.isBefore(cutoff), isTrue);
+    });
   });
 
   group('Task Limits', () {
@@ -79,18 +129,4 @@ void main() {
       expect(SignalTaskProvider.minSignalTasks, equals(3));
     });
   });
-}
-
-/// Helper function that mirrors the logic in SignalTaskProvider._isPastMidnightCutoff
-/// This allows us to test the logic without needing the full provider setup
-bool _isPastMidnightCutoff(DateTime now) {
-  const midnightCutoffHour = SignalTaskProvider.midnightCutoffHour;
-  const midnightCutoffMinute = SignalTaskProvider.midnightCutoffMinute;
-
-  // Check if we're at or past 23:59
-  if (now.hour > midnightCutoffHour) return true;
-  if (now.hour == midnightCutoffHour && now.minute >= midnightCutoffMinute) {
-    return true;
-  }
-  return false;
 }

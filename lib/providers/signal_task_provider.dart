@@ -87,19 +87,18 @@ class SignalTaskProvider extends ChangeNotifier {
     final now = DateTime.now();
 
     // ============ MIDNIGHT CUTOFF CHECK ============
-    // This is a HARD cutoff - timers MUST stop at 11:59 PM regardless of:
+    // This is a HARD cutoff - timers MUST stop at 11:59 PM on the day the
+    // active slot started, regardless of:
     // - autoEnd setting
     // - wasManualContinue flag
     // - plannedEndTime
-    // This prevents accidental overnight tracking (the bug Luke reported)
-    if (_isPastMidnightCutoff(now)) {
-      final cutoffTime = DateTime(
-        now.year,
-        now.month,
-        now.day,
-        midnightCutoffHour,
-        midnightCutoffMinute,
-      );
+    //
+    // Using the slot's anchor day (not just "today") makes this resilient to:
+    // - app suspended/killed by OS
+    // - device restarts
+    // - delayed app opens after midnight
+    if (_hasReachedMidnightCutoffForSlot(activeSlot, now)) {
+      final cutoffTime = midnightCutoffForSlot(activeSlot);
       // Force stop the timer at midnight cutoff
       stopTimeSlot(
         taskToEnd.id,
@@ -141,15 +140,33 @@ class SignalTaskProvider extends ChangeNotifier {
     }
   }
 
-  /// Check if the current time is at or past the midnight cutoff (11:59 PM)
-  /// This is a hard boundary to prevent overnight tracking
-  bool _isPastMidnightCutoff(DateTime now) {
-    // Check if we're at or past 23:59
-    if (now.hour > midnightCutoffHour) return true;
-    if (now.hour == midnightCutoffHour && now.minute >= midnightCutoffMinute) {
-      return true;
-    }
-    return false;
+  /// Returns 11:59 PM on the same day as [anchorTime].
+  @visibleForTesting
+  static DateTime midnightCutoffForAnchor(DateTime anchorTime) {
+    return DateTime(
+      anchorTime.year,
+      anchorTime.month,
+      anchorTime.day,
+      midnightCutoffHour,
+      midnightCutoffMinute,
+    );
+  }
+
+  /// Returns the hard midnight cutoff for a specific active slot.
+  ///
+  /// Priority of anchor timestamps:
+  /// 1. sessionStartTime (continuous session start)
+  /// 2. actualStartTime (current segment start)
+  /// 3. plannedStartTime (fallback)
+  @visibleForTesting
+  static DateTime midnightCutoffForSlot(TimeSlot slot) {
+    final anchorTime =
+        slot.sessionStartTime ?? slot.actualStartTime ?? slot.plannedStartTime;
+    return midnightCutoffForAnchor(anchorTime);
+  }
+
+  bool _hasReachedMidnightCutoffForSlot(TimeSlot slot, DateTime now) {
+    return !now.isBefore(midnightCutoffForSlot(slot));
   }
 
   /// Throttled check for missed slots - runs at most every 2 minutes
@@ -268,11 +285,24 @@ class SignalTaskProvider extends ChangeNotifier {
 
   /// Reconcile timers that should have auto-ended while app was suspended.
   Future<void> _reconcileOverdueAutoEndSessions() async {
+    // Use all tasks from storage so we still reconcile active sessions from
+    // previous dates after app restarts/device reboots.
+    final allTasks = _storageService.getAllSignalTasks();
     final now = DateTime.now();
 
-    for (final task in _tasks) {
+    for (final task in allTasks) {
       final activeSlot = task.activeTimeSlot;
       if (activeSlot == null) continue;
+
+      if (_hasReachedMidnightCutoffForSlot(activeSlot, now)) {
+        await stopTimeSlot(
+          task.id,
+          activeSlot.id,
+          forceKeep: true,
+          endedAt: midnightCutoffForSlot(activeSlot),
+        );
+        continue;
+      }
 
       final shouldAutoEnd =
           activeSlot.autoEnd &&
