@@ -342,25 +342,30 @@ class SignalTask extends HiveObject {
 
   /// End a specific time slot (accumulates session time)
   /// Only counts actual work time (gaps are NOT included in accumulatedSeconds)
-  void endTimeSlot(String slotId) {
+  void endTimeSlot(String slotId, {DateTime? endedAt}) {
     final slotIndex = timeSlots.indexWhere((s) => s.id == slotId);
     if (slotIndex == -1) return;
 
     final slot = timeSlots[slotIndex];
-    final now = DateTime.now();
+    final requestedEndTime = endedAt ?? DateTime.now();
+    final safeEndTime =
+        slot.actualStartTime != null &&
+            requestedEndTime.isBefore(slot.actualStartTime!)
+        ? slot.actualStartTime!
+        : requestedEndTime;
 
     // Calculate accumulated time including this session
     // Only count the actual work time from actualStartTime to now
     int newAccumulatedSeconds = slot.accumulatedSeconds;
     if (slot.actualStartTime != null && slot.isActive) {
-      final workDuration = now.difference(slot.actualStartTime!);
+      final workDuration = safeEndTime.difference(slot.actualStartTime!);
       newAccumulatedSeconds += workDuration.inSeconds;
     }
 
     // Create a new slot with updated values to ensure Hive saves properly
     timeSlots[slotIndex] = slot.copyWith(
-      actualEndTime: now,
-      lastStopTime: now, // Record when we stopped for gap calculation
+      actualEndTime: safeEndTime,
+      lastStopTime: safeEndTime, // Record when we stopped for gap calculation
       isActive: false,
       accumulatedSeconds: newAccumulatedSeconds,
     );

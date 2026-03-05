@@ -576,6 +576,59 @@ void main() {
           expect(slot.sessionStartTime, equals(initialSessionStartTime));
         },
       );
+
+      test('endTimeSlot uses provided endedAt for accumulation', () {
+        final startTime = DateTime(2026, 1, 5, 9, 0, 0);
+        final endedAt = DateTime(2026, 1, 5, 9, 25, 0);
+
+        final task = createTestTask(
+          timeSlots: [
+            TimeSlot(
+              id: 'slot-1',
+              plannedStartTime: DateTime(2026, 1, 5, 9, 0),
+              plannedEndTime: DateTime(2026, 1, 5, 10, 0),
+              actualStartTime: startTime,
+              sessionStartTime: startTime,
+              isActive: true,
+              accumulatedSeconds: 600, // 10m previous work
+            ),
+          ],
+        );
+
+        task.endTimeSlot('slot-1', endedAt: endedAt);
+
+        final slot = task.timeSlots.first;
+        expect(slot.isActive, isFalse);
+        expect(slot.actualEndTime, equals(endedAt));
+        expect(slot.lastStopTime, equals(endedAt));
+        expect(slot.accumulatedSeconds, equals(2100)); // 10m + 25m
+      });
+
+      test('endTimeSlot clamps endedAt before start to start time', () {
+        final startTime = DateTime(2026, 1, 5, 9, 0, 0);
+        final invalidEndedAt = DateTime(2026, 1, 5, 8, 45, 0);
+
+        final task = createTestTask(
+          timeSlots: [
+            TimeSlot(
+              id: 'slot-1',
+              plannedStartTime: DateTime(2026, 1, 5, 9, 0),
+              plannedEndTime: DateTime(2026, 1, 5, 10, 0),
+              actualStartTime: startTime,
+              sessionStartTime: startTime,
+              isActive: true,
+              accumulatedSeconds: 120,
+            ),
+          ],
+        );
+
+        task.endTimeSlot('slot-1', endedAt: invalidEndedAt);
+
+        final slot = task.timeSlots.first;
+        expect(slot.actualEndTime, equals(startTime));
+        expect(slot.lastStopTime, equals(startTime));
+        expect(slot.accumulatedSeconds, equals(120)); // no negative addition
+      });
     });
 
     group('Formatted Output', () {
