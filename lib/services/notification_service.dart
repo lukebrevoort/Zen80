@@ -39,6 +39,11 @@ class NotificationService {
   bool _hasNotifiedNoiseWarning = false;
   bool _isTimerActive = false; // Track if any timer is currently running
 
+  /// Optional callbacks for actionable timer notifications.
+  Future<void> Function(String taskId, String slotId)? onEndActionRequested;
+  Future<void> Function(String taskId, String slotId)?
+  onContinueActionRequested;
+
   // Notification IDs - base IDs for different notification types
   static const int _goldenRatioNotificationId = 10;
   static const int _morningReminderNotificationId = 20;
@@ -239,6 +244,7 @@ class NotificationService {
     required DateTime scheduledTime,
     String? category,
     bool isTimeSensitive = false,
+    String? payload,
   }) async {
     final tzScheduledTime = tz.TZDateTime.from(scheduledTime, tz.local);
 
@@ -263,6 +269,7 @@ class NotificationService {
       body,
       tzScheduledTime,
       details,
+      payload: payload,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
@@ -301,6 +308,7 @@ class NotificationService {
     if (completionTime.isBefore(now)) return;
 
     final slotIdHash = activeSlot.id.hashCode.abs() % 10000;
+    final timerPayload = _buildTimerPayload(activeTask.id, activeSlot.id);
     final plannedDuration = activeSlot.plannedEndTime.difference(
       activeSlot.plannedStartTime,
     );
@@ -316,6 +324,7 @@ class NotificationService {
         scheduledTime: endingSoonTime,
         category: 'taskEnding',
         isTimeSensitive: true,
+        payload: timerPayload,
       );
     }
 
@@ -887,9 +896,10 @@ class NotificationService {
   }
 
   /// Handle notification tap
-  void _onNotificationTapped(NotificationResponse response) {
+  Future<void> _onNotificationTapped(NotificationResponse response) async {
     // Handle action buttons
     final actionId = response.actionId;
+    final timerIds = _parseTimerPayload(response.payload);
     if (actionId != null) {
       switch (actionId) {
         case 'start':
@@ -899,14 +909,31 @@ class NotificationService {
           // TODO: Snooze notification by 5 minutes
           break;
         case 'continue':
-          // TODO: Continue past planned end time
+          if (timerIds != null && onContinueActionRequested != null) {
+            await onContinueActionRequested!(timerIds.taskId, timerIds.slotId);
+          }
           break;
         case 'end':
-          // TODO: End the current task
+          if (timerIds != null && onEndActionRequested != null) {
+            await onEndActionRequested!(timerIds.taskId, timerIds.slotId);
+          }
           break;
       }
     }
     // For now, just opening the app is sufficient
+  }
+
+  String _buildTimerPayload(String taskId, String slotId) {
+    return '$taskId::$slotId';
+  }
+
+  _TimerPayload? _parseTimerPayload(String? payload) {
+    if (payload == null || payload.isEmpty) return null;
+    final parts = payload.split('::');
+    if (parts.length != 2 || parts[0].isEmpty || parts[1].isEmpty) {
+      return null;
+    }
+    return _TimerPayload(taskId: parts[0], slotId: parts[1]);
   }
 
   /// Cancel all notifications and timers
@@ -928,4 +955,11 @@ class _TaskAndSlot {
   final TimeSlot slot;
 
   const _TaskAndSlot({required this.task, required this.slot});
+}
+
+class _TimerPayload {
+  final String taskId;
+  final String slotId;
+
+  const _TimerPayload({required this.taskId, required this.slotId});
 }
