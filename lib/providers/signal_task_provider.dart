@@ -18,6 +18,7 @@ class SignalTaskProvider extends ChangeNotifier {
   Timer? _autoEndTimer; // Timer for checking auto-end conditions
   DateTime? _lastMissedSlotCheck; // Throttle for missed slot cleanup
   DateTime? _lastOvertimeSync; // Throttle for overtime calendar sync
+  bool _autoEndCheckInProgress = false;
 
   /// Callback for when a task timer starts
   /// Can be used to update notifications and track actual work
@@ -67,76 +68,97 @@ class SignalTaskProvider extends ChangeNotifier {
   void _startAutoEndChecker() {
     _autoEndTimer?.cancel();
     _autoEndTimer = Timer.periodic(const Duration(seconds: 10), (_) {
-      _checkAutoEnd();
+      unawaited(_checkAutoEnd());
     });
   }
 
   /// Check if any active timer should be auto-ended
-  void _checkAutoEnd({bool checkMissedSlots = true}) {
-    // Also check for missed slots (throttled to every 2 minutes)
-    if (checkMissedSlots) {
-      _checkMissedSlotsThrottled();
-    }
+  Future<void> _checkAutoEnd({bool checkMissedSlots = true}) async {
+    if (_autoEndCheckInProgress) return;
+    _autoEndCheckInProgress = true;
+    try {
+      // Also check for missed slots (throttled to every 2 minutes)
+      if (checkMissedSlots) {
+        _checkMissedSlotsThrottled();
+      }
 
-    if (_activeTask == null) return;
+      if (_activeTask == null) return;
 
-    final taskToEnd = _activeTask!;
-    final activeSlot = taskToEnd.activeTimeSlot;
-    if (activeSlot == null) return;
+      final taskToEnd = _activeTask!;
+      final activeSlot = taskToEnd.activeTimeSlot;
+      if (activeSlot == null) return;
 
-    final now = DateTime.now();
+      final now = DateTime.now();
 
-    // ============ MIDNIGHT CUTOFF CHECK ============
-    // This is a HARD cutoff - timers MUST stop at 11:59 PM on the day the
-    // active slot started, regardless of:
-    // - autoEnd setting
-    // - wasManualContinue flag
-    // - plannedEndTime
-    //
-    // Using the slot's anchor day (not just "today") makes this resilient to:
-    // - app suspended/killed by OS
-    // - device restarts
-    // - delayed app opens after midnight
-    if (_hasReachedMidnightCutoffForSlot(activeSlot, now)) {
-      final cutoffTime = midnightCutoffForSlot(activeSlot);
-      // Force stop the timer at midnight cutoff
-      stopTimeSlot(
-        taskToEnd.id,
-        activeSlot.id,
-        forceKeep: true,
-        endedAt: cutoffTime,
-      );
-      onMidnightCutoff?.call(taskToEnd, activeSlot);
-      debugPrint(
-        '[MidnightCutoff] Force-stopped timer for "${taskToEnd.title}" at ${now.hour}:${now.minute}',
-      );
-      return; // Don't run any other auto-end logic
-    }
-
-    final isPastPlannedEnd = !now.isBefore(activeSlot.plannedEndTime);
-
-    // Check if we've passed the planned end time
-    if (isPastPlannedEnd) {
-      // If auto-end is enabled and user hasn't manually continued
-      if (activeSlot.autoEnd && !activeSlot.wasManualContinue) {
-        // Auto-end the timer
-        stopTimeSlot(
+      // ============ MIDNIGHT CUTOFF CHECK ============
+      // This is a HARD cutoff - timers MUST stop at 11:59 PM on the day the
+      // active slot started, regardless of:
+      // - autoEnd setting
+      // - wasManualContinue flag
+      // - plannedEndTime
+      //
+      // Using the slot's anchor day (not just "today") makes this resilient to:
+      // - app suspended/killed by OS
+      // - device restarts
+      // - delayed app opens after midnight
+      if (_hasReachedMidnightCutoffForSlot(activeSlot, now)) {
+        final cutoffTime = midnightCutoffForSlot(activeSlot);
+        // Force stop the timer at midnight cutoff
+        await stopTimeSlot(
           taskToEnd.id,
           activeSlot.id,
-          endedAt: activeSlot.plannedEndTime,
+          forceKeep: true,
+          endedAt: cutoffTime,
         );
-        onAutoEnd?.call(taskToEnd, activeSlot);
-      } else if (!activeSlot.wasManualContinue) {
-        // Notify that timer has reached end (for UI prompts)
-        onTimerReachedEnd?.call(taskToEnd, activeSlot);
+
+        final updatedTask = getTask(taskToEnd.id) ?? taskToEnd;
+        final updatedSlot = updatedTask.timeSlots.cast<TimeSlot?>().firstWhere(
+          (s) => s?.id == activeSlot.id,
+          orElse: () => null,
+        );
+        onMidnightCutoff?.call(updatedTask, updatedSlot ?? activeSlot);
+        debugPrint(
+          '[MidnightCutoff] Force-stopped timer for "${taskToEnd.title}" at ${now.hour}:${now.minute}',
+        );
+        return; // Don't run any other auto-end logic
       }
 
-      // Overtime calendar sync: When user is working past plannedEndTime,
-      // periodically update the calendar event to show the growing overtime.
-      // Throttled to every 2 minutes to avoid API spam.
-      if (activeSlot.wasManualContinue || !activeSlot.autoEnd) {
-        _checkOvertimeSyncThrottled(taskToEnd, activeSlot);
+      final isPastPlannedEnd = !now.isBefore(activeSlot.plannedEndTime);
+
+      // Check if we've passed the planned end time
+      if (isPastPlannedEnd) {
+        // If auto-end is enabled and user hasn't manually continued
+        if (activeSlot.autoEnd && !activeSlot.wasManualContinue) {
+          // Auto-end the timer
+          await stopTimeSlot(
+            taskToEnd.id,
+            activeSlot.id,
+            endedAt: activeSlot.plannedEndTime,
+          );
+
+          final updatedTask = getTask(taskToEnd.id) ?? taskToEnd;
+          final updatedSlot = updatedTask.timeSlots.cast<TimeSlot?>().firstWhere(
+            (s) => s?.id == activeSlot.id,
+            orElse: () => null,
+          );
+          onAutoEnd?.call(updatedTask, updatedSlot ?? activeSlot);
+        } else if (!activeSlot.wasManualContinue) {
+          // Notify that timer has reached end (for UI prompts)
+          onTimerReachedEnd?.call(taskToEnd, activeSlot);
+        }
+
+        // Overtime calendar sync: When user is working past plannedEndTime,
+        // periodically update the calendar event to show the growing overtime.
+        // Throttled to every 2 minutes to avoid API spam.
+        if (activeSlot.wasManualContinue || !activeSlot.autoEnd) {
+          _checkOvertimeSyncThrottled(taskToEnd, activeSlot);
+        }
       }
+    } catch (e, st) {
+      debugPrint('[AutoEndChecker] Failed: $e');
+      debugPrint('$st');
+    } finally {
+      _autoEndCheckInProgress = false;
     }
   }
 
@@ -1387,7 +1409,7 @@ class SignalTaskProvider extends ChangeNotifier {
     _updateActiveTask();
 
     // Ensure any overdue timers are auto-ended immediately on resume
-    _checkAutoEnd(checkMissedSlots: false);
+    unawaited(_checkAutoEnd(checkMissedSlots: false));
 
     // Check for and clean up any missed slots
     // This catches slots that became "missed" while app was in background
@@ -1402,7 +1424,7 @@ class SignalTaskProvider extends ChangeNotifier {
   /// app is suspended/terminated by the OS.
   void onAppBackgrounded() {
     _updateActiveTask();
-    _checkAutoEnd(checkMissedSlots: false);
+    unawaited(_checkAutoEnd(checkMissedSlots: false));
   }
 
   // ============ Phase 6.B: Missed Slot Detection ============

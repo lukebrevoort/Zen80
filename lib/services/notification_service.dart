@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz_data;
@@ -40,9 +41,30 @@ class NotificationService {
   bool _isTimerActive = false; // Track if any timer is currently running
 
   /// Optional callbacks for actionable timer notifications.
-  Future<void> Function(String taskId, String slotId)? onEndActionRequested;
+  Future<void> Function(String taskId, String slotId)? _onEndActionRequested;
   Future<void> Function(String taskId, String slotId)?
-  onContinueActionRequested;
+  _onContinueActionRequested;
+  _PendingTimerAction? _pendingTimerAction;
+
+  set onEndActionRequested(
+    Future<void> Function(String taskId, String slotId)? handler,
+  ) {
+    _onEndActionRequested = handler;
+    unawaited(_flushPendingTimerAction());
+  }
+
+  Future<void> Function(String taskId, String slotId)?
+  get onEndActionRequested => _onEndActionRequested;
+
+  set onContinueActionRequested(
+    Future<void> Function(String taskId, String slotId)? handler,
+  ) {
+    _onContinueActionRequested = handler;
+    unawaited(_flushPendingTimerAction());
+  }
+
+  Future<void> Function(String taskId, String slotId)?
+  get onContinueActionRequested => _onContinueActionRequested;
 
   // Notification IDs - base IDs for different notification types
   static const int _goldenRatioNotificationId = 10;
@@ -230,7 +252,6 @@ class NotificationService {
           title: '${task.title} ends in $minutesBeforeEnd minutes',
           body: 'Wrap up or continue past the scheduled time.',
           scheduledTime: endingSoonTime,
-          category: 'taskEnding',
         );
       }
     }
@@ -895,6 +916,39 @@ class NotificationService {
     return '$hour:$minute $period';
   }
 
+  Future<void> _flushPendingTimerAction() async {
+    final pending = _pendingTimerAction;
+    if (pending == null) return;
+
+    switch (pending.actionId) {
+      case 'continue':
+        final handler = _onContinueActionRequested;
+        if (handler == null) return;
+        _pendingTimerAction = null;
+        try {
+          await handler(pending.taskId, pending.slotId);
+        } catch (e, st) {
+          debugPrint('[NotificationAction] continue failed: $e');
+          debugPrint('$st');
+        }
+        return;
+      case 'end':
+        final handler = _onEndActionRequested;
+        if (handler == null) return;
+        _pendingTimerAction = null;
+        try {
+          await handler(pending.taskId, pending.slotId);
+        } catch (e, st) {
+          debugPrint('[NotificationAction] end failed: $e');
+          debugPrint('$st');
+        }
+        return;
+      default:
+        _pendingTimerAction = null;
+        return;
+    }
+  }
+
   /// Handle notification tap
   Future<void> _onNotificationTapped(NotificationResponse response) async {
     // Handle action buttons
@@ -909,13 +963,39 @@ class NotificationService {
           // TODO: Snooze notification by 5 minutes
           break;
         case 'continue':
-          if (timerIds != null && onContinueActionRequested != null) {
-            await onContinueActionRequested!(timerIds.taskId, timerIds.slotId);
+          if (timerIds == null) break;
+          final handler = _onContinueActionRequested;
+          if (handler != null) {
+            try {
+              await handler(timerIds.taskId, timerIds.slotId);
+            } catch (e, st) {
+              debugPrint('[NotificationAction] continue failed: $e');
+              debugPrint('$st');
+            }
+          } else {
+            _pendingTimerAction = _PendingTimerAction(
+              actionId: actionId,
+              taskId: timerIds.taskId,
+              slotId: timerIds.slotId,
+            );
           }
           break;
         case 'end':
-          if (timerIds != null && onEndActionRequested != null) {
-            await onEndActionRequested!(timerIds.taskId, timerIds.slotId);
+          if (timerIds == null) break;
+          final handler = _onEndActionRequested;
+          if (handler != null) {
+            try {
+              await handler(timerIds.taskId, timerIds.slotId);
+            } catch (e, st) {
+              debugPrint('[NotificationAction] end failed: $e');
+              debugPrint('$st');
+            }
+          } else {
+            _pendingTimerAction = _PendingTimerAction(
+              actionId: actionId,
+              taskId: timerIds.taskId,
+              slotId: timerIds.slotId,
+            );
           }
           break;
       }
@@ -955,6 +1035,18 @@ class _TaskAndSlot {
   final TimeSlot slot;
 
   const _TaskAndSlot({required this.task, required this.slot});
+}
+
+class _PendingTimerAction {
+  final String actionId;
+  final String taskId;
+  final String slotId;
+
+  const _PendingTimerAction({
+    required this.actionId,
+    required this.taskId,
+    required this.slotId,
+  });
 }
 
 class _TimerPayload {
