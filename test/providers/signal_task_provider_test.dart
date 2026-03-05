@@ -129,4 +129,45 @@ void main() {
       expect(SignalTaskProvider.minSignalTasks, equals(3));
     });
   });
+
+  group('Auto-End Callback Gate', () {
+    test('emits callback for ended non-discarded slot', () {
+      final slot = TimeSlot(
+        id: 'ended-slot',
+        plannedStartTime: DateTime(2026, 1, 5, 10, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 11, 0),
+        actualStartTime: DateTime(2026, 1, 5, 10, 0),
+        actualEndTime: DateTime(2026, 1, 5, 11, 0),
+        isActive: false,
+        isDiscarded: false,
+      );
+
+      expect(SignalTaskProvider.shouldEmitAutoEndCallback(slot), isTrue);
+    });
+
+    test('does not emit callback for discarded slot', () {
+      final slot = TimeSlot(
+        id: 'discarded-slot',
+        plannedStartTime: DateTime(2026, 1, 5, 10, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 11, 0),
+        isActive: false,
+        isDiscarded: true,
+      );
+
+      expect(SignalTaskProvider.shouldEmitAutoEndCallback(slot), isFalse);
+    });
+
+    test('does not emit callback for reset pre-scheduled slot', () {
+      final slot = TimeSlot(
+        id: 'reset-slot',
+        plannedStartTime: DateTime(2026, 1, 5, 10, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 11, 0),
+        googleCalendarEventId: 'gcal-1',
+        isActive: false,
+        isDiscarded: false,
+      );
+
+      expect(SignalTaskProvider.shouldEmitAutoEndCallback(slot), isFalse);
+    });
+  });
 }

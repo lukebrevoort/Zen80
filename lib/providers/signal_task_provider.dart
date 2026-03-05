@@ -137,11 +137,12 @@ class SignalTaskProvider extends ChangeNotifier {
           );
 
           final updatedTask = getTask(taskToEnd.id) ?? taskToEnd;
-          final updatedSlot = updatedTask.timeSlots.cast<TimeSlot?>().firstWhere(
-            (s) => s?.id == activeSlot.id,
-            orElse: () => null,
-          );
-          onAutoEnd?.call(updatedTask, updatedSlot ?? activeSlot);
+          final updatedSlot = updatedTask.timeSlots
+              .cast<TimeSlot?>()
+              .firstWhere((s) => s?.id == activeSlot.id, orElse: () => null);
+          if (updatedSlot != null && shouldEmitAutoEndCallback(updatedSlot)) {
+            onAutoEnd?.call(updatedTask, updatedSlot);
+          }
         } else if (!activeSlot.wasManualContinue) {
           // Notify that timer has reached end (for UI prompts)
           onTimerReachedEnd?.call(taskToEnd, activeSlot);
@@ -348,8 +349,15 @@ class SignalTaskProvider extends ChangeNotifier {
         (s) => s?.id == activeSlot.id,
         orElse: () => null,
       );
-      onAutoEnd?.call(updatedTask ?? task, updatedSlot ?? activeSlot);
+      if (updatedSlot != null && shouldEmitAutoEndCallback(updatedSlot)) {
+        onAutoEnd?.call(updatedTask ?? task, updatedSlot);
+      }
     }
+  }
+
+  @visibleForTesting
+  static bool shouldEmitAutoEndCallback(TimeSlot slot) {
+    return !slot.isActive && !slot.isDiscarded && slot.actualEndTime != null;
   }
 
   /// Refresh tasks from storage
