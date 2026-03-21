@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
@@ -6,6 +7,7 @@ import 'package:timezone/data/latest.dart' as tz_data;
 
 import '../models/signal_task.dart';
 import '../models/time_slot.dart';
+import 'storage_service.dart';
 import 'settings_service.dart';
 
 /// Service for managing all app notifications
@@ -32,9 +34,12 @@ class NotificationService {
   final FlutterLocalNotificationsPlugin _notifications =
       FlutterLocalNotificationsPlugin();
   final SettingsService _settings = SettingsService();
+  final StorageService _storage = StorageService();
+  final Random _random = Random();
 
   Timer? _noiseCheckTimer;
   Timer? _inactivityCheckTimer;
+  Timer? _taskNudgeCheckTimer;
   DateTime? _noiseTimerStartedAt;
   String? _noiseTaskTitle;
   bool _hasNotifiedNoiseWarning = false;
@@ -137,6 +142,14 @@ class NotificationService {
 
     // Start inactivity monitoring
     _startInactivityMonitoring();
+
+    // Start daily task nudge monitoring
+    _startTaskNudgeMonitoring();
+
+    // Evaluate quickly on launch so users receive nudges without waiting.
+    Future.delayed(const Duration(minutes: 1), () {
+      unawaited(_checkDailyTaskNudges());
+    });
   }
 
   /// Request notification permissions
@@ -740,6 +753,38 @@ class NotificationService {
     });
   }
 
+  /// Start monitoring for users that have not added any tasks today.
+  void _startTaskNudgeMonitoring() {
+    _taskNudgeCheckTimer?.cancel();
+    _taskNudgeCheckTimer = Timer.periodic(const Duration(minutes: 30), (_) {
+      unawaited(_checkDailyTaskNudges());
+    });
+  }
+
+  /// Refresh nudge behavior after settings changes.
+  Future<void> refreshTaskNudgePreferences() async {
+    if (!_settings.enableTaskNudges) {
+      // When task nudges are disabled, cancel the periodic check timer
+      // and any existing smart nudge notifications.
+      _taskNudgeCheckTimer?.cancel();
+      _taskNudgeCheckTimer = null;
+      await _notifications.cancel(_smartNudgeNotificationId);
+    } else {
+      // When task nudges are enabled (or re-enabled), ensure monitoring runs.
+      _startTaskNudgeMonitoring();
+    }
+    await _checkDailyTaskNudges();
+  }
+
+  /// Record that user created a task and stop nudge flow for the day.
+  Future<void> onTaskCreatedForDate(DateTime scheduledDate) async {
+    if (!_isSameDay(scheduledDate, DateTime.now())) return;
+
+    await _settings.markTaskCreated();
+    await _settings.resetTaskNudgeStateForToday();
+    await _notifications.cancel(_smartNudgeNotificationId);
+  }
+
   /// Record that user performed an activity (started timer, logged time, etc.)
   Future<void> recordActivity() async {
     await _settings.recordActivity();
@@ -840,10 +885,101 @@ class NotificationService {
     // This method is called specifically when a timer stops
     // If we've been inactive long enough, show a smart nudge
     await _checkInactivity();
+    await _checkDailyTaskNudges();
   }
 
-  /// Show intelligent nudge notification
+  /// Check and send daily nudges when no tasks have been added today.
+  Future<void> _checkDailyTaskNudges() async {
+    final now = DateTime.now();
+    final tasksToday = _storage.getSignalTasksForDate(now);
+
+    if (!shouldSendDailyTaskNudge(
+      isTimerActive: _isTimerActive,
+      nudgesEnabled: _settings.enableTaskNudges,
+      now: now,
+      quietStartHour: _settings.taskNudgeQuietStartHour,
+      quietEndHour: _settings.taskNudgeQuietEndHour,
+      tasksTodayCount: tasksToday.length,
+      hasCreatedTaskToday: _settings.hasCreatedTaskToday,
+      nudgeCountToday: _settings.taskNudgeCountToday,
+      maxPerDay: SettingsService.defaultTaskNudgeMaxPerDay,
+      lastSentAt: _settings.lastTaskNudgeSentAt,
+      frequencyMinutes: _settings.taskNudgeFrequencyMinutes,
+    )) {
+      if (tasksToday.isNotEmpty || _settings.hasCreatedTaskToday) {
+        await _notifications.cancel(_smartNudgeNotificationId);
+        await _settings.resetTaskNudgeStateForToday();
+      }
+      return;
+    }
+
+    await _showSmartNudgeNotification();
+  }
+
+  @visibleForTesting
+  static bool shouldSendDailyTaskNudge({
+    required bool isTimerActive,
+    required bool nudgesEnabled,
+    required DateTime now,
+    required int quietStartHour,
+    required int quietEndHour,
+    required int tasksTodayCount,
+    required bool hasCreatedTaskToday,
+    required int nudgeCountToday,
+    required int maxPerDay,
+    required DateTime? lastSentAt,
+    required int frequencyMinutes,
+  }) {
+    if (isTimerActive) return false;
+    if (!nudgesEnabled) return false;
+    if (isWithinQuietHours(
+      now: now,
+      startHour: quietStartHour,
+      endHour: quietEndHour,
+    )) {
+      return false;
+    }
+    if (tasksTodayCount > 0 || hasCreatedTaskToday) return false;
+    if (nudgeCountToday >= maxPerDay) return false;
+
+    if (lastSentAt != null) {
+      final elapsed = now.difference(lastSentAt);
+      if (elapsed.inMinutes < frequencyMinutes) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  @visibleForTesting
+  static bool isWithinQuietHours({
+    required DateTime now,
+    required int startHour,
+    required int endHour,
+  }) {
+    if (startHour == endHour) {
+      return true;
+    }
+
+    if (startHour < endHour) {
+      return now.hour >= startHour && now.hour < endHour;
+    }
+
+    return now.hour >= startHour || now.hour < endHour;
+  }
+
+  bool _isWithinQuietHours(DateTime now) {
+    final startHour = _settings.taskNudgeQuietStartHour;
+    final endHour = _settings.taskNudgeQuietEndHour;
+
+    return isWithinQuietHours(now: now, startHour: startHour, endHour: endHour);
+  }
+
+  /// Show intelligent nudge notification with rotating friendly variants.
   Future<void> _showSmartNudgeNotification() async {
+    final variant = _pickNudgeVariant();
+
     const darwinDetails = DarwinNotificationDetails(
       presentAlert: true,
       presentBadge: false,
@@ -858,15 +994,60 @@ class NotificationService {
 
     await _notifications.show(
       _smartNudgeNotificationId,
-      'Time to Focus ⏰',
-      'You haven\'t logged any Signal time recently. What\'s the most important thing to work on?',
+      variant.title,
+      variant.body,
       details,
     );
+
+    await _settings.incrementTaskNudgeCountToday();
+    await _settings.setLastTaskNudgeSentAt(DateTime.now());
+    await _settings.setLastTaskNudgeVariantIndex(variant.index);
+    await _settings.recordTaskNudgeMetric(variant.style.name);
   }
 
   // ============================================================
   // UTILITY METHODS
   // ============================================================
+
+  _TaskNudgeVariant _pickNudgeVariant() {
+    const variants = <_TaskNudgeVariant>[
+      _TaskNudgeVariant(
+        index: 0,
+        style: _TaskNudgeStyle.motivational,
+        title: 'Tiny start, big momentum',
+        body:
+            'One task is enough to get today moving. What feels most important?',
+      ),
+      _TaskNudgeVariant(
+        index: 1,
+        style: _TaskNudgeStyle.playful,
+        title: 'Your list is waiting :)',
+        body: 'Future-you loves a quick plan. Add one task and keep it light.',
+      ),
+      _TaskNudgeVariant(
+        index: 2,
+        style: _TaskNudgeStyle.practical,
+        title: 'Quick planning check-in',
+        body: 'Capture your next task now so it is easier to start when ready.',
+      ),
+      _TaskNudgeVariant(
+        index: 3,
+        style: _TaskNudgeStyle.contextual,
+        title: 'How about your next focus block?',
+        body:
+            'Add a task for this part of the day and give yourself a clear target.',
+      ),
+    ];
+
+    final lastIndex = _settings.lastTaskNudgeVariantIndex;
+    final candidates = variants.where((v) => v.index != lastIndex).toList();
+    if (candidates.isEmpty) return variants.first;
+    return candidates[_random.nextInt(candidates.length)];
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
 
   /// Format duration as readable string
   String _formatDuration(Duration duration) {
@@ -1020,6 +1201,7 @@ class NotificationService {
   Future<void> cancelAll() async {
     _noiseCheckTimer?.cancel();
     _inactivityCheckTimer?.cancel();
+    _taskNudgeCheckTimer?.cancel();
     await _notifications.cancelAll();
   }
 
@@ -1027,6 +1209,7 @@ class NotificationService {
   void dispose() {
     _noiseCheckTimer?.cancel();
     _inactivityCheckTimer?.cancel();
+    _taskNudgeCheckTimer?.cancel();
   }
 }
 
@@ -1054,4 +1237,20 @@ class _TimerPayload {
   final String slotId;
 
   const _TimerPayload({required this.taskId, required this.slotId});
+}
+
+enum _TaskNudgeStyle { motivational, playful, practical, contextual }
+
+class _TaskNudgeVariant {
+  final int index;
+  final _TaskNudgeStyle style;
+  final String title;
+  final String body;
+
+  const _TaskNudgeVariant({
+    required this.index,
+    required this.style,
+    required this.title,
+    required this.body,
+  });
 }
