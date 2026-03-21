@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/signal_task.dart';
 import '../models/time_slot.dart';
 import '../providers/signal_task_provider.dart';
+import '../providers/stats_provider.dart';
 import '../providers/tag_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/tags/tag_chip.dart';
@@ -24,9 +25,77 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   int _titleTapCount = 0;
   DateTime? _lastTapTime;
+  late final AnimationController _streakPulseController;
+  late final Animation<double> _streakScale;
+  SignalTaskProvider? _taskProviderForListener;
+  bool _isRefreshingStreak = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _streakPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _streakScale = Tween<double>(begin: 1.0, end: 1.22).animate(
+      CurvedAnimation(
+        parent: _streakPulseController,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshStreak();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final taskProvider = context.read<SignalTaskProvider>();
+    if (!identical(_taskProviderForListener, taskProvider)) {
+      _taskProviderForListener?.removeListener(_handleTaskProviderChange);
+      _taskProviderForListener = taskProvider;
+      _taskProviderForListener?.addListener(_handleTaskProviderChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    _taskProviderForListener?.removeListener(_handleTaskProviderChange);
+    _streakPulseController.dispose();
+    super.dispose();
+  }
+
+  void _handleTaskProviderChange() {
+    _refreshStreak();
+  }
+
+  Future<void> _refreshStreak() async {
+    if (!mounted || _isRefreshingStreak) return;
+    _isRefreshingStreak = true;
+    final statsProvider = context.read<StatsProvider>();
+    try {
+      final result = await statsProvider.refreshStreak();
+      if (!mounted || !result.streakIncreased) return;
+
+      await _streakPulseController.forward(from: 0);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Streak increased to ${result.currentStreak}!'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } finally {
+      _isRefreshingStreak = false;
+    }
+  }
 
   void _onTitleTap() {
     final now = DateTime.now();
@@ -127,6 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final taskProvider = context.watch<SignalTaskProvider>();
+    final statsProvider = context.watch<StatsProvider>();
     final tagProvider = context.watch<TagProvider>();
     final settingsProvider = context.watch<SettingsProvider>();
 
@@ -137,6 +207,8 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
+        leadingWidth: 84,
+        leading: _buildStreakBadge(statsProvider),
         title: GestureDetector(
           onTap: _onTitleTap,
           child: const Text(
@@ -176,6 +248,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   tagProvider,
                   taskProvider,
                   settingsProvider,
+                  statsProvider,
                   hasActiveTask,
                 ),
         ),
@@ -238,12 +311,15 @@ class _HomeScreenState extends State<HomeScreen> {
     TagProvider tagProvider,
     SignalTaskProvider taskProvider,
     SettingsProvider settingsProvider,
+    StatsProvider statsProvider,
     bool hasActiveTask,
   ) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(20),
       children: [
+        _buildStreakRecoveryPrompt(statsProvider),
+
         // Signal ratio circle
         _buildRatioCircle(ratio, taskProvider, settingsProvider),
         const SizedBox(height: 8),
@@ -301,6 +377,72 @@ class _HomeScreenState extends State<HomeScreen> {
 
         const SizedBox(height: 40), // Bottom padding
       ],
+    );
+  }
+
+  Widget _buildStreakBadge(StatsProvider statsProvider) {
+    final streak = statsProvider.streakData;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 12),
+      child: Center(
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ScaleTransition(
+              scale: _streakScale,
+              child: Icon(
+                Icons.local_fire_department,
+                color: Colors.deepOrange.shade500,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '${streak.currentStreak}',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildStreakRecoveryPrompt(StatsProvider statsProvider) {
+    if (!statsProvider.hasRecoverableMissedDay) {
+      return const SizedBox.shrink();
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.orange.shade100),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Missed yesterday? Recover your streak.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.orange.shade900,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+          TextButton(
+            onPressed: () async {
+              await statsProvider.recoverStreak();
+              if (!mounted) return;
+              await _streakPulseController.forward(from: 0);
+            },
+            child: const Text('Recover'),
+          ),
+        ],
+      ),
     );
   }
 
