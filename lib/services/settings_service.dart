@@ -252,6 +252,16 @@ class SettingsService {
     final now = DateTime.now();
     final today = '${now.year}-${now.month}-${now.day}';
     await _prefs?.setString(_taskNudgeCountDateKey, today);
+    // Reset count so that no nudges are considered sent yet today.
+    await _prefs?.setInt(_taskNudgeCountValueKey, 0);
+    await _prefs?.remove(_taskNudgeLastSentAtKey);
+  }
+
+  /// Disable task nudges for the rest of today by marking the daily count as maxed out.
+  Future<void> disableTaskNudgesForToday() async {
+    final now = DateTime.now();
+    final today = '${now.year}-${now.month}-${now.day}';
+    await _prefs?.setString(_taskNudgeCountDateKey, today);
     await _prefs?.setInt(_taskNudgeCountValueKey, defaultTaskNudgeMaxPerDay);
     await _prefs?.remove(_taskNudgeLastSentAtKey);
   }
