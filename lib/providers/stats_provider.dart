@@ -340,19 +340,6 @@ class StatsProvider extends ChangeNotifier {
     return _storageService.getSignalTasksForDate(normalizedDate);
   }
 
-  /// Get all signal tasks for a specific week (Monday-Sunday)
-  List<SignalTask> getTasksForWeek(DateTime weekStart) {
-    final normalizedStart = WeeklyStats.getWeekStart(weekStart);
-    final weekEnd = normalizedStart.add(const Duration(days: 6));
-    return _storageService.getSignalTasksForDateRange(normalizedStart, weekEnd);
-  }
-
-  /// Get all signal tasks for a specific day
-  List<SignalTask> getTasksForDay(DateTime date) {
-    final normalizedDate = DateTime(date.year, date.month, date.day);
-    return _storageService.getSignalTasksForDate(normalizedDate);
-  }
-
   /// Get daily stats for a specific date
   DailyStats getDailyStats(DateTime date) {
     final normalizedDate = DateTime(date.year, date.month, date.day);
