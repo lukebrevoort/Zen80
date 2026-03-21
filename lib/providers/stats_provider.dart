@@ -71,6 +71,8 @@ class DailyStats {
 class StatsProvider extends ChangeNotifier {
   final StorageService _storageService;
   final SettingsService _settingsService;
+  final Map<DateTime, _WeekComputation> _weekComputationCache = {};
+  int? _cachedFocusHoursPerDay;
 
   /// Default focus hours per day (from QNA_GUIDE.md)
   static const int defaultFocusHoursPerDay = 8;
@@ -102,34 +104,7 @@ class StatsProvider extends ChangeNotifier {
 
   /// Get statistics for any week containing the given date
   WeeklyStats getStatsForWeek(DateTime anyDateInWeek) {
-    final weekStart = WeeklyStats.getWeekStart(anyDateInWeek);
-    final weekEnd = weekStart.add(const Duration(days: 6));
-
-    // Get all tasks for the week
-    final weekTasks = _storageService.getSignalTasksForDateRange(
-      weekStart,
-      weekEnd,
-    );
-
-    // Calculate total signal minutes
-    final totalSignalMinutes = _calculateTotalSignalMinutes(weekTasks);
-
-    // Calculate focus minutes (based on settings)
-    final totalFocusMinutes = focusMinutesPerWeek;
-
-    // Calculate completed tasks count
-    final completedTasksCount = weekTasks.where((t) => t.isComplete).length;
-
-    // Calculate tag breakdown
-    final tagBreakdown = calculateTagBreakdown(weekTasks);
-
-    return WeeklyStats(
-      weekStartDate: weekStart,
-      totalSignalMinutes: totalSignalMinutes,
-      totalFocusMinutes: totalFocusMinutes,
-      completedTasksCount: completedTasksCount,
-      tagBreakdown: tagBreakdown,
-    );
+    return _getWeekComputation(anyDateInWeek).weeklyStats;
   }
 
   /// Calculate total signal minutes from a list of tasks
@@ -172,49 +147,33 @@ class StatsProvider extends ChangeNotifier {
 
   /// Get daily breakdown for a week (7 days starting from weekStart)
   List<DailyStats> getDailyBreakdown(DateTime weekStart) {
-    final normalizedStart = WeeklyStats.getWeekStart(weekStart);
-    final dailyStats = <DailyStats>[];
-
-    for (int i = 0; i < 7; i++) {
-      final date = normalizedStart.add(Duration(days: i));
-      final tasksForDay = _storageService.getSignalTasksForDate(date);
-
-      final signalMinutes = tasksForDay.fold<int>(
-        0,
-        (sum, task) => sum + task.actualMinutes,
-      );
-
-      final completedTasks = tasksForDay.where((t) => t.isComplete).length;
-
-      dailyStats.add(
-        DailyStats(
-          date: date,
-          signalMinutes: signalMinutes,
-          focusMinutes: focusMinutesPerDay,
-          completedTasks: completedTasks,
-        ),
-      );
-    }
-
-    return dailyStats;
+    return _getWeekComputation(weekStart).dailyBreakdown;
   }
 
   /// Get all signal tasks for a specific week (Monday-Sunday)
   List<SignalTask> getTasksForWeek(DateTime weekStart) {
-    final normalizedStart = WeeklyStats.getWeekStart(weekStart);
-    final weekEnd = normalizedStart.add(const Duration(days: 6));
-    return _storageService.getSignalTasksForDateRange(normalizedStart, weekEnd);
+    return _getWeekComputation(weekStart).weekTasks;
   }
 
   /// Get all signal tasks for a specific day
   List<SignalTask> getTasksForDay(DateTime date) {
     final normalizedDate = DateTime(date.year, date.month, date.day);
+    final weekStart = WeeklyStats.getWeekStart(normalizedDate);
+    final cachedWeek = _weekComputationCache[weekStart];
+    if (cachedWeek != null) {
+      return cachedWeek.getTasksForDay(normalizedDate);
+    }
     return _storageService.getSignalTasksForDate(normalizedDate);
   }
 
   /// Get daily stats for a specific date
   DailyStats getDailyStats(DateTime date) {
     final normalizedDate = DateTime(date.year, date.month, date.day);
+    final weekStart = WeeklyStats.getWeekStart(normalizedDate);
+    final cachedWeek = _weekComputationCache[weekStart];
+    if (cachedWeek != null) {
+      return cachedWeek.getDailyStats(normalizedDate);
+    }
     final tasksForDay = _storageService.getSignalTasksForDate(normalizedDate);
 
     final signalMinutes = tasksForDay.fold<int>(
@@ -334,6 +293,121 @@ class StatsProvider extends ChangeNotifier {
   /// Notify listeners of data changes
   /// Call this after tasks are updated to refresh stats
   void refresh() {
+    _invalidateWeekCache();
     notifyListeners();
+  }
+
+  _WeekComputation _getWeekComputation(DateTime anyDateInWeek) {
+    _syncCacheWithFocusHours();
+
+    final weekStart = WeeklyStats.getWeekStart(anyDateInWeek);
+    final cached = _weekComputationCache[weekStart];
+    if (cached != null) {
+      return cached;
+    }
+
+    final weekEnd = weekStart.add(const Duration(days: 6));
+    final weekTasks = _storageService.getSignalTasksForDateRange(
+      weekStart,
+      weekEnd,
+    );
+
+    final tasksByDay = <DateTime, List<SignalTask>>{
+      for (int i = 0; i < 7; i++) weekStart.add(Duration(days: i)): [],
+    };
+
+    for (final task in weekTasks) {
+      final taskDate = _normalizeDate(task.scheduledDate);
+      final bucket = tasksByDay[taskDate];
+      if (bucket != null) {
+        bucket.add(task);
+      }
+    }
+
+    final dailyBreakdown = List<DailyStats>.generate(7, (index) {
+      final date = weekStart.add(Duration(days: index));
+      final tasksForDay = tasksByDay[date] ?? const <SignalTask>[];
+      final signalMinutes = _calculateTotalSignalMinutes(tasksForDay);
+      final completedTasks = tasksForDay
+          .where((task) => task.isComplete)
+          .length;
+
+      return DailyStats(
+        date: date,
+        signalMinutes: signalMinutes,
+        focusMinutes: focusMinutesPerDay,
+        completedTasks: completedTasks,
+      );
+    });
+
+    final weekStats = WeeklyStats(
+      weekStartDate: weekStart,
+      totalSignalMinutes: _calculateTotalSignalMinutes(weekTasks),
+      totalFocusMinutes: focusMinutesPerWeek,
+      completedTasksCount: weekTasks.where((t) => t.isComplete).length,
+      tagBreakdown: calculateTagBreakdown(weekTasks),
+    );
+
+    final computation = _WeekComputation(
+      weekTasks: weekTasks,
+      tasksByDay: tasksByDay,
+      dailyBreakdown: dailyBreakdown,
+      weeklyStats: weekStats,
+    );
+
+    _weekComputationCache[weekStart] = computation;
+    return computation;
+  }
+
+  void _syncCacheWithFocusHours() {
+    final currentFocusHours = focusHoursPerDay;
+    if (_cachedFocusHoursPerDay != null &&
+        _cachedFocusHoursPerDay != currentFocusHours) {
+      _invalidateWeekCache();
+    }
+    _cachedFocusHoursPerDay = currentFocusHours;
+  }
+
+  void _invalidateWeekCache() {
+    _weekComputationCache.clear();
+    _cachedFocusHoursPerDay = null;
+  }
+
+  DateTime _normalizeDate(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+}
+
+class _WeekComputation {
+  final List<SignalTask> weekTasks;
+  final Map<DateTime, List<SignalTask>> _tasksByDay;
+  final List<DailyStats> dailyBreakdown;
+  final WeeklyStats weeklyStats;
+
+  _WeekComputation({
+    required List<SignalTask> weekTasks,
+    required Map<DateTime, List<SignalTask>> tasksByDay,
+    required List<DailyStats> dailyBreakdown,
+    required this.weeklyStats,
+  }) : weekTasks = List<SignalTask>.unmodifiable(weekTasks),
+       _tasksByDay = {
+         for (final entry in tasksByDay.entries)
+           entry.key: List<SignalTask>.unmodifiable(entry.value),
+       },
+       dailyBreakdown = List<DailyStats>.unmodifiable(dailyBreakdown);
+
+  List<SignalTask> getTasksForDay(DateTime date) {
+    return List<SignalTask>.from(_tasksByDay[date] ?? const <SignalTask>[]);
+  }
+
+  DailyStats getDailyStats(DateTime date) {
+    final stats = dailyBreakdown.firstWhere(
+      (dayStats) =>
+          dayStats.date.year == date.year &&
+          dayStats.date.month == date.month &&
+          dayStats.date.day == date.day,
+      orElse: () => DailyStats.empty(date),
+    );
+    return stats;
   }
 }
