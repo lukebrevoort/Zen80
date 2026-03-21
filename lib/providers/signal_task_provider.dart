@@ -396,6 +396,8 @@ class SignalTaskProvider extends ChangeNotifier {
 
     await _storageService.addSignalTask(task);
 
+    await NotificationService().onTaskCreatedForDate(task.scheduledDate);
+
     // Add to local list if it's for the selected date
     if (_isSameDay(task.scheduledDate, _selectedDate)) {
       _tasks.add(task);
@@ -408,6 +410,8 @@ class SignalTaskProvider extends ChangeNotifier {
   /// Add a pre-built task (e.g., from Google Calendar import)
   Future<void> addSignalTask(SignalTask task) async {
     await _storageService.addSignalTask(task);
+
+    await NotificationService().onTaskCreatedForDate(task.scheduledDate);
 
     // Add to local list if it's for the selected date
     if (_isSameDay(task.scheduledDate, _selectedDate)) {

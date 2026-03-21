@@ -29,6 +29,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late int _wakeUpMinute;
   late int _noiseAlertMinutes;
   late int _inactivityAlertMinutes;
+  late bool _enableTaskNudges;
+  late int _taskNudgeFrequencyMinutes;
+  late int _taskNudgeQuietStartHour;
+  late int _taskNudgeQuietEndHour;
   SyncFrequency _syncFrequency = SyncFrequency.minutes15;
   DateTime? _lastSyncTime;
 
@@ -44,6 +48,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
       _wakeUpMinute = _settings.wakeUpMinute;
       _noiseAlertMinutes = _settings.noiseAlertMinutes;
       _inactivityAlertMinutes = _settings.inactivityAlertMinutes;
+      _enableTaskNudges = _settings.enableTaskNudges;
+      _taskNudgeFrequencyMinutes = _settings.taskNudgeFrequencyMinutes;
+      _taskNudgeQuietStartHour = _settings.taskNudgeQuietStartHour;
+      _taskNudgeQuietEndHour = _settings.taskNudgeQuietEndHour;
     });
     _loadSyncSettings();
   }
@@ -114,6 +122,85 @@ class _SettingsScreenState extends State<SettingsScreen> {
       setState(() => _inactivityAlertMinutes = result);
       await _settings.setInactivityAlertMinutes(result);
     }
+  }
+
+  Future<void> _toggleTaskNudges(bool enabled) async {
+    setState(() => _enableTaskNudges = enabled);
+    await _settings.setEnableTaskNudges(enabled);
+    await _notifications.refreshTaskNudgePreferences();
+  }
+
+  Future<void> _selectTaskNudgeFrequency() async {
+    final result = await _showDurationPicker(
+      title: 'Daily Nudge Frequency',
+      subtitle: 'How often to send a gentle reminder when no tasks are added',
+      currentMinutes: _taskNudgeFrequencyMinutes,
+      options: [60, 120, 180, 240, 300, 360],
+    );
+
+    if (result == null) return;
+
+    setState(() => _taskNudgeFrequencyMinutes = result);
+    await _settings.setTaskNudgeFrequencyMinutes(result);
+    await _notifications.refreshTaskNudgePreferences();
+  }
+
+  Future<void> _selectTaskNudgeQuietStart() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _taskNudgeQuietStartHour, minute: 0),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Colors.black,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked == null) return;
+
+    setState(() => _taskNudgeQuietStartHour = picked.hour);
+    await _settings.setTaskNudgeQuietHours(
+      startHour: _taskNudgeQuietStartHour,
+      endHour: _taskNudgeQuietEndHour,
+    );
+    await _notifications.refreshTaskNudgePreferences();
+  }
+
+  Future<void> _selectTaskNudgeQuietEnd() async {
+    final picked = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay(hour: _taskNudgeQuietEndHour, minute: 0),
+      builder: (context, child) {
+        return Theme(
+          data: Theme.of(context).copyWith(
+            colorScheme: const ColorScheme.light(
+              primary: Colors.black,
+              onPrimary: Colors.white,
+              surface: Colors.white,
+              onSurface: Colors.black,
+            ),
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (picked == null) return;
+
+    setState(() => _taskNudgeQuietEndHour = picked.hour);
+    await _settings.setTaskNudgeQuietHours(
+      startHour: _taskNudgeQuietStartHour,
+      endHour: _taskNudgeQuietEndHour,
+    );
+    await _notifications.refreshTaskNudgePreferences();
   }
 
   Future<void> _selectStartReminderTime(SettingsProvider settings) async {
@@ -392,6 +479,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
           // Notifications section
           _buildSectionHeader('NOTIFICATIONS'),
 
+          _buildSwitchTile(
+            icon: Icons.notifications_active_outlined,
+            title: 'Daily Task Nudges',
+            subtitle: 'Friendly reminders when no tasks are added yet',
+            value: _enableTaskNudges,
+            onChanged: _toggleTaskNudges,
+          ),
+          if (_enableTaskNudges)
+            _buildSettingTile(
+              icon: Icons.schedule,
+              title: 'Nudge Frequency',
+              subtitle: 'Minimum time between nudges',
+              value: _formatMinutes(_taskNudgeFrequencyMinutes),
+              onTap: _selectTaskNudgeFrequency,
+            ),
+          if (_enableTaskNudges)
+            _buildSettingTile(
+              icon: Icons.nightlight_round,
+              title: 'Quiet Hours Start',
+              subtitle: 'Do not send nudges after this time',
+              value: _formatTime(_taskNudgeQuietStartHour, 0),
+              onTap: _selectTaskNudgeQuietStart,
+            ),
+          if (_enableTaskNudges)
+            _buildSettingTile(
+              icon: Icons.wb_sunny,
+              title: 'Quiet Hours End',
+              subtitle: 'Resume nudges after this time',
+              value: _formatTime(_taskNudgeQuietEndHour, 0),
+              onTap: _selectTaskNudgeQuietEnd,
+            ),
+
+          const Divider(height: 1, indent: 20, endIndent: 20),
+          const SizedBox(height: 8),
+
           // Task notification toggles
           Consumer<SettingsProvider>(
             builder: (context, settings, _) {
@@ -653,7 +775,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       trailing: Switch.adaptive(
         value: value,
         onChanged: onChanged,
-        activeColor: Colors.black,
+        activeThumbColor: Colors.black,
       ),
     );
   }

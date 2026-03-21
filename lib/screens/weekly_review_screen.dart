@@ -114,7 +114,7 @@ class _WeeklyReviewScreenState extends State<WeeklyReviewScreen> {
       context.read<StatsProvider>(),
       _currentWeekStart,
       4,
-      weeklyStats.tagBreakdown.keys.take(4).toList(),
+      weeklyStats.sortedTagBreakdown.take(4).map((entry) => entry.key).toList(),
     );
 
     return SingleChildScrollView(
@@ -496,7 +496,7 @@ class _WeeklyReviewScreenState extends State<WeeklyReviewScreen> {
         'Signal Time: ${current.formattedSignalTime} (${_formatDelta(signalDelta)})',
       )
       ..writeln(
-        'Signal Ratio: ${current.signalPercentage.toStringAsFixed(0)}% (${_formatDelta(ratioDelta.round())} pts)',
+        'Signal Ratio: ${current.signalPercentage.toStringAsFixed(0)}% (${_formatPointDelta(ratioDelta)} pts)',
       )
       ..writeln('Completed Tasks: ${current.completedTasksCount}')
       ..writeln(
@@ -536,6 +536,12 @@ class _WeeklyReviewScreenState extends State<WeeklyReviewScreen> {
   String _formatDelta(int delta) {
     if (delta == 0) return '0m';
     return '${delta > 0 ? '+' : '-'}${_formatMinutes(delta.abs())}';
+  }
+
+  String _formatPointDelta(double delta) {
+    if (delta == 0) return '0';
+    final sign = delta > 0 ? '+' : '-';
+    return '$sign${delta.abs().toStringAsFixed(1)}';
   }
 
   String _formatMinutes(int minutes) {
