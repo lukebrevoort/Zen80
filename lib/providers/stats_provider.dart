@@ -1,7 +1,18 @@
 import 'package:flutter/foundation.dart';
+import 'dart:math' as math;
 import '../models/models.dart';
 import '../services/storage_service.dart';
 import '../services/settings_service.dart';
+
+class StreakRefreshResult {
+  final bool streakIncreased;
+  final int currentStreak;
+
+  const StreakRefreshResult({
+    required this.streakIncreased,
+    required this.currentStreak,
+  });
+}
 
 /// Helper class for daily statistics breakdown
 class DailyStats {
@@ -74,8 +85,171 @@ class StatsProvider extends ChangeNotifier {
 
   /// Default focus hours per day (from QNA_GUIDE.md)
   static const int defaultFocusHoursPerDay = 8;
+  static const double streakGoalThreshold = 0.8;
 
-  StatsProvider(this._storageService, this._settingsService);
+  StreakData _streakData = StreakData.initial();
+
+  StatsProvider(this._storageService, this._settingsService) {
+    _streakData = _storageService.getStreakData();
+  }
+
+  StreakData get streakData => _streakData;
+
+  bool get hasRecoverableMissedDay {
+    final pendingDate = _streakData.pendingMissedDate;
+    if (pendingDate == null) return false;
+    final yesterday = _normalizeDate(
+      DateTime.now().subtract(const Duration(days: 1)),
+    );
+    return _isSameDay(pendingDate, yesterday);
+  }
+
+  bool get canUseStreakFreeze {
+    return hasRecoverableMissedDay && _streakData.availableFreezes > 0;
+  }
+
+  bool get canRecoverStreak {
+    return hasRecoverableMissedDay;
+  }
+
+  Future<StreakRefreshResult> refreshStreak({DateTime? now}) async {
+    final today = _normalizeDate(now ?? DateTime.now());
+    final previousStreak = _streakData.currentStreak;
+    var updated = _streakData;
+
+    if (updated.pendingMissedDate != null &&
+        today.difference(updated.pendingMissedDate!).inDays > 1) {
+      updated = updated.copyWith(
+        clearPendingMissedDate: true,
+        pendingStreakBase: 0,
+      );
+    }
+
+    DateTime? startDate;
+    if (updated.lastProcessedDate == null) {
+      final allTasks = _storageService.getAllSignalTasks();
+      if (allTasks.isEmpty) {
+        updated = updated.copyWith(lastProcessedDate: today);
+        await _persistStreakData(updated);
+        return StreakRefreshResult(
+          streakIncreased: false,
+          currentStreak: updated.currentStreak,
+        );
+      }
+
+      final earliestDate = allTasks
+          .map((task) => _normalizeDate(task.scheduledDate))
+          .reduce((a, b) => a.isBefore(b) ? a : b);
+      startDate = earliestDate;
+    } else {
+      startDate = _normalizeDate(
+        updated.lastProcessedDate!.add(const Duration(days: 1)),
+      );
+    }
+
+    if (startDate.isAfter(today)) {
+      return StreakRefreshResult(
+        streakIncreased: false,
+        currentStreak: updated.currentStreak,
+      );
+    }
+
+    DateTime cursor = startDate;
+    while (!cursor.isAfter(today)) {
+      final achieved = _isGoalAchievedForDate(cursor);
+
+      if (achieved) {
+        if (updated.lastGoalDate != null &&
+            _isSameDay(updated.lastGoalDate!, cursor)) {
+          // Day already counted.
+        } else if (updated.lastGoalDate != null &&
+            _isSameDay(
+              updated.lastGoalDate!.add(const Duration(days: 1)),
+              cursor,
+            )) {
+          updated = updated.copyWith(
+            currentStreak: updated.currentStreak + 1,
+            lastGoalDate: cursor,
+          );
+        } else {
+          updated = updated.copyWith(currentStreak: 1, lastGoalDate: cursor);
+        }
+
+        if (updated.currentStreak > updated.longestStreak) {
+          updated = updated.copyWith(longestStreak: updated.currentStreak);
+        }
+      } else {
+        if (updated.currentStreak > 0 && updated.pendingMissedDate == null) {
+          updated = updated.copyWith(
+            pendingMissedDate: cursor,
+            pendingStreakBase: updated.currentStreak,
+          );
+        }
+        updated = updated.copyWith(currentStreak: 0);
+      }
+
+      updated = updated.copyWith(lastProcessedDate: cursor);
+      cursor = cursor.add(const Duration(days: 1));
+    }
+
+    await _persistStreakData(updated);
+
+    return StreakRefreshResult(
+      streakIncreased: updated.currentStreak > previousStreak,
+      currentStreak: updated.currentStreak,
+    );
+  }
+
+  Future<void> useStreakFreeze() async {
+    if (!canUseStreakFreeze) return;
+
+    final pendingDate = _streakData.pendingMissedDate;
+    if (pendingDate == null) return;
+
+    final restoredStreak =
+        _streakData.pendingStreakBase + _streakData.currentStreak;
+    final restoredLastGoalDate =
+        (_streakData.lastGoalDate != null &&
+            _streakData.lastGoalDate!.isAfter(pendingDate))
+        ? _streakData.lastGoalDate
+        : pendingDate;
+
+    await _persistStreakData(
+      _streakData.copyWith(
+        currentStreak: restoredStreak,
+        longestStreak: math.max(_streakData.longestStreak, restoredStreak),
+        availableFreezes: _streakData.availableFreezes - 1,
+        lastGoalDate: restoredLastGoalDate,
+        clearPendingMissedDate: true,
+        pendingStreakBase: 0,
+      ),
+    );
+  }
+
+  Future<void> recoverStreak() async {
+    if (!canRecoverStreak) return;
+
+    final pendingDate = _streakData.pendingMissedDate;
+    if (pendingDate == null) return;
+
+    final restoredStreak =
+        _streakData.pendingStreakBase + _streakData.currentStreak;
+    final restoredLastGoalDate =
+        (_streakData.lastGoalDate != null &&
+            _streakData.lastGoalDate!.isAfter(pendingDate))
+        ? _streakData.lastGoalDate
+        : pendingDate;
+
+    await _persistStreakData(
+      _streakData.copyWith(
+        currentStreak: restoredStreak,
+        longestStreak: math.max(_streakData.longestStreak, restoredStreak),
+        lastGoalDate: restoredLastGoalDate,
+        clearPendingMissedDate: true,
+        pendingStreakBase: 0,
+      ),
+    );
+  }
 
   // ============ Focus Hours Configuration ============
 
@@ -334,6 +508,21 @@ class StatsProvider extends ChangeNotifier {
   /// Notify listeners of data changes
   /// Call this after tasks are updated to refresh stats
   void refresh() {
+    notifyListeners();
+  }
+
+  bool _isGoalAchievedForDate(DateTime date) {
+    final daily = getDailyStats(date);
+    return daily.ratio >= streakGoalThreshold;
+  }
+
+  DateTime _normalizeDate(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  Future<void> _persistStreakData(StreakData value) async {
+    _streakData = value;
+    await _storageService.saveStreakData(value);
     notifyListeners();
   }
 }

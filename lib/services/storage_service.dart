@@ -10,11 +10,13 @@ class StorageService {
   static const String _tagsBoxName = 'tags';
   static const String _settingsBoxName = 'settings';
   static const String _weeklyStatsBoxName = 'weekly_stats';
+  static const String _streakBoxName = 'streak_data';
   static const String _syncQueueBoxName = 'sync_queue';
   static const String _rolloverSuggestionsBoxName = 'rollover_suggestions';
 
   // Settings keys
   static const String _userSettingsKey = 'user_settings';
+  static const String _streakDataKey = 'streak_data';
 
   // ============ Box Getters ============
 
@@ -32,6 +34,7 @@ class StorageService {
   Box<dynamic> get _settingsBox => Hive.box(_settingsBoxName);
   Box<WeeklyStats> get _weeklyStatsBox =>
       Hive.box<WeeklyStats>(_weeklyStatsBoxName);
+  Box<StreakData> get _streakBox => Hive.box<StreakData>(_streakBoxName);
   Box<CalendarSyncOperation> get _syncQueueBox =>
       Hive.box<CalendarSyncOperation>(_syncQueueBoxName);
   Box<RolloverSuggestion> get _rolloverSuggestionsBox =>
@@ -212,6 +215,19 @@ class StorageService {
   /// Get all weekly stats
   List<WeeklyStats> getAllWeeklyStats() {
     return _weeklyStatsBox.values.toList();
+  }
+
+  // ============ Streak Data ============
+
+  /// Get streak data (or defaults if missing)
+  StreakData getStreakData() {
+    final data = _streakBox.get(_streakDataKey);
+    return data ?? StreakData.initial();
+  }
+
+  /// Save streak data
+  Future<void> saveStreakData(StreakData streakData) async {
+    await _streakBox.put(_streakDataKey, streakData);
   }
 
   // ============ Calendar Sync Queue ============
@@ -422,6 +438,7 @@ class StorageService {
       'weeklyStats': _weeklyStatsBox.values
           .map((s) => _weeklyStatsToMap(s))
           .toList(),
+      'streakData': _streakDataToMap(getStreakData()),
     };
   }
 
@@ -467,6 +484,18 @@ class StorageService {
       'totalFocusMinutes': stats.totalFocusMinutes,
       'completedTasksCount': stats.completedTasksCount,
       'tagBreakdown': stats.tagBreakdown,
+    };
+  }
+
+  Map<String, dynamic> _streakDataToMap(StreakData streakData) {
+    return {
+      'currentStreak': streakData.currentStreak,
+      'longestStreak': streakData.longestStreak,
+      'lastGoalDate': streakData.lastGoalDate?.toIso8601String(),
+      'lastProcessedDate': streakData.lastProcessedDate?.toIso8601String(),
+      'availableFreezes': streakData.availableFreezes,
+      'pendingMissedDate': streakData.pendingMissedDate?.toIso8601String(),
+      'pendingStreakBase': streakData.pendingStreakBase,
     };
   }
 }

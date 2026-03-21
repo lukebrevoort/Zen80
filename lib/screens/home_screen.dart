@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import '../models/signal_task.dart';
 import '../models/time_slot.dart';
 import '../providers/signal_task_provider.dart';
+import '../providers/stats_provider.dart';
 import '../providers/tag_provider.dart';
 import '../providers/settings_provider.dart';
 import '../widgets/tags/tag_chip.dart';
@@ -24,9 +25,77 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen>
+    with SingleTickerProviderStateMixin {
   int _titleTapCount = 0;
   DateTime? _lastTapTime;
+  late final AnimationController _streakPulseController;
+  late final Animation<double> _streakScale;
+  SignalTaskProvider? _taskProviderForListener;
+  bool _isRefreshingStreak = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _streakPulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 550),
+    );
+    _streakScale = Tween<double>(begin: 1.0, end: 1.22).animate(
+      CurvedAnimation(
+        parent: _streakPulseController,
+        curve: Curves.easeOutBack,
+      ),
+    );
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refreshStreak();
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final taskProvider = context.read<SignalTaskProvider>();
+    if (!identical(_taskProviderForListener, taskProvider)) {
+      _taskProviderForListener?.removeListener(_handleTaskProviderChange);
+      _taskProviderForListener = taskProvider;
+      _taskProviderForListener?.addListener(_handleTaskProviderChange);
+    }
+  }
+
+  @override
+  void dispose() {
+    _taskProviderForListener?.removeListener(_handleTaskProviderChange);
+    _streakPulseController.dispose();
+    super.dispose();
+  }
+
+  void _handleTaskProviderChange() {
+    _refreshStreak();
+  }
+
+  Future<void> _refreshStreak() async {
+    if (!mounted || _isRefreshingStreak) return;
+    _isRefreshingStreak = true;
+    final statsProvider = context.read<StatsProvider>();
+    try {
+      final result = await statsProvider.refreshStreak();
+      if (!mounted || !result.streakIncreased) return;
+
+      await _streakPulseController.forward(from: 0);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Streak increased to ${result.currentStreak}!'),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+    } finally {
+      _isRefreshingStreak = false;
+    }
+  }
 
   void _onTitleTap() {
     final now = DateTime.now();
@@ -127,6 +196,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final taskProvider = context.watch<SignalTaskProvider>();
+    final statsProvider = context.watch<StatsProvider>();
     final tagProvider = context.watch<TagProvider>();
     final settingsProvider = context.watch<SettingsProvider>();
 
@@ -176,6 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   tagProvider,
                   taskProvider,
                   settingsProvider,
+                  statsProvider,
                   hasActiveTask,
                 ),
         ),
@@ -238,12 +309,16 @@ class _HomeScreenState extends State<HomeScreen> {
     TagProvider tagProvider,
     SignalTaskProvider taskProvider,
     SettingsProvider settingsProvider,
+    StatsProvider statsProvider,
     bool hasActiveTask,
   ) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
       padding: const EdgeInsets.all(20),
       children: [
+        _buildStreakCard(statsProvider),
+        const SizedBox(height: 16),
+
         // Signal ratio circle
         _buildRatioCircle(ratio, taskProvider, settingsProvider),
         const SizedBox(height: 8),
@@ -301,6 +376,98 @@ class _HomeScreenState extends State<HomeScreen> {
 
         const SizedBox(height: 40), // Bottom padding
       ],
+    );
+  }
+
+  Widget _buildStreakCard(StatsProvider statsProvider) {
+    final streak = statsProvider.streakData;
+    final hasRecoveryPrompt = statsProvider.hasRecoverableMissedDay;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.orange.shade50,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.orange.shade100),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              ScaleTransition(
+                scale: _streakScale,
+                child: Icon(
+                  Icons.local_fire_department,
+                  color: Colors.deepOrange.shade500,
+                  size: 28,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                '${streak.currentStreak} day streak',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                'Best: ${streak.longestStreak}',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'Daily goal: 80%+ Signal Ratio',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            'Freezes left: ${streak.availableFreezes}',
+            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+          ),
+          if (hasRecoveryPrompt) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Missed yesterday? Use a freeze or recover your streak.',
+              style: TextStyle(
+                fontSize: 13,
+                color: Colors.orange.shade900,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (statsProvider.canUseStreakFreeze)
+                  OutlinedButton(
+                    onPressed: () async {
+                      await statsProvider.useStreakFreeze();
+                      if (!mounted) return;
+                      await _streakPulseController.forward(from: 0);
+                    },
+                    child: const Text('Use Freeze'),
+                  ),
+                if (statsProvider.canUseStreakFreeze) const SizedBox(width: 8),
+                TextButton(
+                  onPressed: () async {
+                    await statsProvider.recoverStreak();
+                    if (!mounted) return;
+                    await _streakPulseController.forward(from: 0);
+                  },
+                  child: const Text('Recover Streak'),
+                ),
+              ],
+            ),
+          ],
+        ],
+      ),
     );
   }
 
