@@ -764,7 +764,14 @@ class NotificationService {
   /// Refresh nudge behavior after settings changes.
   Future<void> refreshTaskNudgePreferences() async {
     if (!_settings.enableTaskNudges) {
+      // When task nudges are disabled, cancel the periodic check timer
+      // and any existing smart nudge notifications.
+      _taskNudgeCheckTimer?.cancel();
+      _taskNudgeCheckTimer = null;
       await _notifications.cancel(_smartNudgeNotificationId);
+    } else {
+      // When task nudges are enabled (or re-enabled), ensure monitoring runs.
+      _startTaskNudgeMonitoring();
     }
     await _checkDailyTaskNudges();
   }
