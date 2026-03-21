@@ -890,37 +890,74 @@ class NotificationService {
 
   /// Check and send daily nudges when no tasks have been added today.
   Future<void> _checkDailyTaskNudges() async {
-    if (_isTimerActive) return;
-    if (!_settings.enableTaskNudges) return;
-    if (_isWithinQuietHours(DateTime.now())) return;
+    final now = DateTime.now();
+    final tasksToday = _storage.getSignalTasksForDate(now);
 
-    final tasksToday = _storage.getSignalTasksForDate(DateTime.now());
-    if (tasksToday.isNotEmpty || _settings.hasCreatedTaskToday) {
-      await _notifications.cancel(_smartNudgeNotificationId);
-      await _settings.resetTaskNudgeStateForToday();
-      return;
-    }
-
-    if (_settings.taskNudgeCountToday >=
-        SettingsService.defaultTaskNudgeMaxPerDay) {
-      return;
-    }
-
-    final lastSentAt = _settings.lastTaskNudgeSentAt;
-    if (lastSentAt != null) {
-      final elapsed = DateTime.now().difference(lastSentAt);
-      if (elapsed.inMinutes < _settings.taskNudgeFrequencyMinutes) {
-        return;
+    if (!shouldSendDailyTaskNudge(
+      isTimerActive: _isTimerActive,
+      nudgesEnabled: _settings.enableTaskNudges,
+      now: now,
+      quietStartHour: _settings.taskNudgeQuietStartHour,
+      quietEndHour: _settings.taskNudgeQuietEndHour,
+      tasksTodayCount: tasksToday.length,
+      hasCreatedTaskToday: _settings.hasCreatedTaskToday,
+      nudgeCountToday: _settings.taskNudgeCountToday,
+      maxPerDay: SettingsService.defaultTaskNudgeMaxPerDay,
+      lastSentAt: _settings.lastTaskNudgeSentAt,
+      frequencyMinutes: _settings.taskNudgeFrequencyMinutes,
+    )) {
+      if (tasksToday.isNotEmpty || _settings.hasCreatedTaskToday) {
+        await _notifications.cancel(_smartNudgeNotificationId);
+        await _settings.resetTaskNudgeStateForToday();
       }
+      return;
     }
 
     await _showSmartNudgeNotification();
   }
 
-  bool _isWithinQuietHours(DateTime now) {
-    final startHour = _settings.taskNudgeQuietStartHour;
-    final endHour = _settings.taskNudgeQuietEndHour;
+  @visibleForTesting
+  static bool shouldSendDailyTaskNudge({
+    required bool isTimerActive,
+    required bool nudgesEnabled,
+    required DateTime now,
+    required int quietStartHour,
+    required int quietEndHour,
+    required int tasksTodayCount,
+    required bool hasCreatedTaskToday,
+    required int nudgeCountToday,
+    required int maxPerDay,
+    required DateTime? lastSentAt,
+    required int frequencyMinutes,
+  }) {
+    if (isTimerActive) return false;
+    if (!nudgesEnabled) return false;
+    if (isWithinQuietHours(
+      now: now,
+      startHour: quietStartHour,
+      endHour: quietEndHour,
+    )) {
+      return false;
+    }
+    if (tasksTodayCount > 0 || hasCreatedTaskToday) return false;
+    if (nudgeCountToday >= maxPerDay) return false;
 
+    if (lastSentAt != null) {
+      final elapsed = now.difference(lastSentAt);
+      if (elapsed.inMinutes < frequencyMinutes) {
+        return false;
+      }
+    }
+
+    return true;
+  }
+
+  @visibleForTesting
+  static bool isWithinQuietHours({
+    required DateTime now,
+    required int startHour,
+    required int endHour,
+  }) {
     if (startHour == endHour) {
       return true;
     }
@@ -930,6 +967,13 @@ class NotificationService {
     }
 
     return now.hour >= startHour || now.hour < endHour;
+  }
+
+  bool _isWithinQuietHours(DateTime now) {
+    final startHour = _settings.taskNudgeQuietStartHour;
+    final endHour = _settings.taskNudgeQuietEndHour;
+
+    return isWithinQuietHours(now: now, startHour: startHour, endHour: endHour);
   }
 
   /// Show intelligent nudge notification with rotating friendly variants.
