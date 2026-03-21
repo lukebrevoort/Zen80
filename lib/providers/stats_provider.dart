@@ -199,6 +199,19 @@ class StatsProvider extends ChangeNotifier {
     return dailyStats;
   }
 
+  /// Get all signal tasks for a specific week (Monday-Sunday)
+  List<SignalTask> getTasksForWeek(DateTime weekStart) {
+    final normalizedStart = WeeklyStats.getWeekStart(weekStart);
+    final weekEnd = normalizedStart.add(const Duration(days: 6));
+    return _storageService.getSignalTasksForDateRange(normalizedStart, weekEnd);
+  }
+
+  /// Get all signal tasks for a specific day
+  List<SignalTask> getTasksForDay(DateTime date) {
+    final normalizedDate = DateTime(date.year, date.month, date.day);
+    return _storageService.getSignalTasksForDate(normalizedDate);
+  }
+
   /// Get daily stats for a specific date
   DailyStats getDailyStats(DateTime date) {
     final normalizedDate = DateTime(date.year, date.month, date.day);
@@ -314,7 +327,6 @@ class StatsProvider extends ChangeNotifier {
 
   /// Format a date range as readable string (e.g., "Jan 1 - 7" or "Dec 28 - Jan 3")
   String formatWeekRange(DateTime weekStart) {
-    final weekEnd = getWeekEnd(weekStart);
     final stats = WeeklyStats(weekStartDate: weekStart);
     return stats.formattedDateRange;
   }
