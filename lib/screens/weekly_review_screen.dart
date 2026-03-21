@@ -114,7 +114,7 @@ class _WeeklyReviewScreenState extends State<WeeklyReviewScreen> {
       context.read<StatsProvider>(),
       _currentWeekStart,
       4,
-      weeklyStats.tagBreakdown.keys.take(4).toList(),
+      weeklyStats.sortedTagBreakdown.take(4).toList(),
     );
 
     return SingleChildScrollView(
