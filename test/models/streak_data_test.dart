@@ -8,7 +8,6 @@ void main() {
 
       expect(streak.currentStreak, 0);
       expect(streak.longestStreak, 0);
-      expect(streak.availableFreezes, 1);
       expect(streak.lastGoalDate, isNull);
       expect(streak.pendingMissedDate, isNull);
     });
@@ -17,7 +16,6 @@ void main() {
       final original = StreakData(
         currentStreak: 4,
         longestStreak: 9,
-        availableFreezes: 2,
         pendingStreakBase: 4,
       );
 
@@ -25,7 +23,6 @@ void main() {
 
       expect(updated.currentStreak, 5);
       expect(updated.longestStreak, 9);
-      expect(updated.availableFreezes, 2);
       expect(updated.pendingStreakBase, 4);
     });
 

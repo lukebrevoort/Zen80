@@ -16,9 +16,6 @@ class StreakData extends HiveObject {
   @HiveField(3)
   DateTime? lastProcessedDate;
 
-  @HiveField(4)
-  int availableFreezes;
-
   @HiveField(5)
   DateTime? pendingMissedDate;
 
@@ -30,7 +27,6 @@ class StreakData extends HiveObject {
     this.longestStreak = 0,
     this.lastGoalDate,
     this.lastProcessedDate,
-    this.availableFreezes = 1,
     this.pendingMissedDate,
     this.pendingStreakBase = 0,
   });
@@ -42,7 +38,6 @@ class StreakData extends HiveObject {
     int? longestStreak,
     DateTime? lastGoalDate,
     DateTime? lastProcessedDate,
-    int? availableFreezes,
     DateTime? pendingMissedDate,
     int? pendingStreakBase,
     bool clearLastGoalDate = false,
@@ -58,7 +53,6 @@ class StreakData extends HiveObject {
       lastProcessedDate: clearLastProcessedDate
           ? null
           : (lastProcessedDate ?? this.lastProcessedDate),
-      availableFreezes: availableFreezes ?? this.availableFreezes,
       pendingMissedDate: clearPendingMissedDate
           ? null
           : (pendingMissedDate ?? this.pendingMissedDate),

@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import '../models/models.dart';
 import '../services/storage_service.dart';
@@ -106,10 +105,6 @@ class StatsProvider extends ChangeNotifier {
     return _isSameDay(pendingDate, yesterday);
   }
 
-  bool get canUseStreakFreeze {
-    return hasRecoverableMissedDay && _streakData.availableFreezes > 0;
-  }
-
   bool get canRecoverStreak {
     return hasRecoverableMissedDay;
   }
@@ -202,32 +197,6 @@ class StatsProvider extends ChangeNotifier {
     );
   }
 
-  Future<void> useStreakFreeze() async {
-    if (!canUseStreakFreeze) return;
-
-    final pendingDate = _streakData.pendingMissedDate;
-    if (pendingDate == null) return;
-
-    final restoredStreak =
-        _streakData.pendingStreakBase + _streakData.currentStreak;
-    final restoredLastGoalDate =
-        (_streakData.lastGoalDate != null &&
-            _streakData.lastGoalDate!.isAfter(pendingDate))
-        ? _streakData.lastGoalDate
-        : pendingDate;
-
-    await _persistStreakData(
-      _streakData.copyWith(
-        currentStreak: restoredStreak,
-        longestStreak: math.max(_streakData.longestStreak, restoredStreak),
-        availableFreezes: _streakData.availableFreezes - 1,
-        lastGoalDate: restoredLastGoalDate,
-        clearPendingMissedDate: true,
-        pendingStreakBase: 0,
-      ),
-    );
-  }
-
   Future<void> recoverStreak() async {
     if (!canRecoverStreak) return;
 
@@ -245,7 +214,9 @@ class StatsProvider extends ChangeNotifier {
     await _persistStreakData(
       _streakData.copyWith(
         currentStreak: restoredStreak,
-        longestStreak: math.max(_streakData.longestStreak, restoredStreak),
+        longestStreak: restoredStreak > _streakData.longestStreak
+            ? restoredStreak
+            : _streakData.longestStreak,
         lastGoalDate: restoredLastGoalDate,
         clearPendingMissedDate: true,
         pendingStreakBase: 0,
@@ -474,6 +445,8 @@ class StatsProvider extends ChangeNotifier {
   bool _isGoalAchievedForDate(DateTime date) {
     final daily = getDailyStats(date);
     return daily.ratio >= streakGoalThreshold;
+  }
+
   _WeekComputation _getWeekComputation(DateTime anyDateInWeek) {
     _syncCacheWithFocusHours();
 
@@ -558,6 +531,7 @@ class StatsProvider extends ChangeNotifier {
     _streakData = value;
     await _storageService.saveStreakData(value);
     notifyListeners();
+  }
 }
 
 class _WeekComputation {

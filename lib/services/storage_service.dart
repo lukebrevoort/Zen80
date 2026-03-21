@@ -493,7 +493,6 @@ class StorageService {
       'longestStreak': streakData.longestStreak,
       'lastGoalDate': streakData.lastGoalDate?.toIso8601String(),
       'lastProcessedDate': streakData.lastProcessedDate?.toIso8601String(),
-      'availableFreezes': streakData.availableFreezes,
       'pendingMissedDate': streakData.pendingMissedDate?.toIso8601String(),
       'pendingStreakBase': streakData.pendingStreakBase,
     };

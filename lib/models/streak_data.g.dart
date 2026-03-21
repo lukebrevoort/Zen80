@@ -21,7 +21,6 @@ class StreakDataAdapter extends TypeAdapter<StreakData> {
       longestStreak: fields[1] as int,
       lastGoalDate: fields[2] as DateTime?,
       lastProcessedDate: fields[3] as DateTime?,
-      availableFreezes: fields[4] as int,
       pendingMissedDate: fields[5] as DateTime?,
       pendingStreakBase: fields[6] as int,
     );
@@ -30,7 +29,7 @@ class StreakDataAdapter extends TypeAdapter<StreakData> {
   @override
   void write(BinaryWriter writer, StreakData obj) {
     writer
-      ..writeByte(7)
+      ..writeByte(6)
       ..writeByte(0)
       ..write(obj.currentStreak)
       ..writeByte(1)
@@ -39,8 +38,6 @@ class StreakDataAdapter extends TypeAdapter<StreakData> {
       ..write(obj.lastGoalDate)
       ..writeByte(3)
       ..write(obj.lastProcessedDate)
-      ..writeByte(4)
-      ..write(obj.availableFreezes)
       ..writeByte(5)
       ..write(obj.pendingMissedDate)
       ..writeByte(6)
