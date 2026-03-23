@@ -10,6 +10,7 @@ export 'day_schedule.dart';
 export 'signal_task.dart';
 export 'user_settings.dart';
 export 'weekly_stats.dart';
+export 'streak_data.dart';
 export 'calendar_sync_operation.dart';
 export 'rollover_suggestion.dart';
 export 'sync_result.dart';

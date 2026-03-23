@@ -13,6 +13,7 @@ import 'models/day_schedule.dart';
 import 'models/signal_task.dart';
 import 'models/user_settings.dart';
 import 'models/weekly_stats.dart';
+import 'models/streak_data.dart';
 import 'models/calendar_sync_operation.dart';
 import 'models/rollover_suggestion.dart';
 
@@ -61,6 +62,7 @@ void main() async {
   Hive.registerAdapter(SignalTaskAdapter());
   Hive.registerAdapter(UserSettingsAdapter());
   Hive.registerAdapter(WeeklyStatsAdapter());
+  Hive.registerAdapter(StreakDataAdapter());
   Hive.registerAdapter(SyncOperationTypeAdapter());
   Hive.registerAdapter(CalendarSyncOperationAdapter());
   Hive.registerAdapter(SuggestionStatusAdapter());
@@ -74,6 +76,7 @@ void main() async {
   await Hive.openBox<Tag>('tags');
   await Hive.openBox('settings'); // Dynamic box for UserSettings
   await Hive.openBox<WeeklyStats>('weekly_stats');
+  await Hive.openBox<StreakData>('streak_data');
   await Hive.openBox<CalendarSyncOperation>('sync_queue');
   await Hive.openBox<RolloverSuggestion>('rollover_suggestions');
 
