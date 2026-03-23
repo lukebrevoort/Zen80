@@ -89,26 +89,15 @@ class SignalTaskProvider extends ChangeNotifier {
       if (activeSlot == null) return;
 
       final now = DateTime.now();
+      final shouldAutoStopAtPlannedEnd = shouldStopAtPlannedEnd(activeSlot);
+      final autoStopAt = effectiveAutoStopTimeForSlot(activeSlot);
 
-      // ============ MIDNIGHT CUTOFF CHECK ============
-      // This is a HARD cutoff - timers MUST stop at 11:59 PM on the day the
-      // active slot started, regardless of:
-      // - autoEnd setting
-      // - wasManualContinue flag
-      // - plannedEndTime
-      //
-      // Using the slot's anchor day (not just "today") makes this resilient to:
-      // - app suspended/killed by OS
-      // - device restarts
-      // - delayed app opens after midnight
-      if (_hasReachedMidnightCutoffForSlot(activeSlot, now)) {
-        final cutoffTime = midnightCutoffForSlot(activeSlot);
-        // Force stop the timer at midnight cutoff
+      if (!now.isBefore(autoStopAt)) {
         await stopTimeSlot(
           taskToEnd.id,
           activeSlot.id,
-          forceKeep: true,
-          endedAt: cutoffTime,
+          forceKeep: !shouldAutoStopAtPlannedEnd,
+          endedAt: autoStopAt,
         );
 
         final updatedTask = getTask(taskToEnd.id) ?? taskToEnd;
@@ -116,13 +105,22 @@ class SignalTaskProvider extends ChangeNotifier {
           (s) => s?.id == activeSlot.id,
           orElse: () => null,
         );
-        onMidnightCutoff?.call(updatedTask, updatedSlot ?? activeSlot);
-        debugPrint(
-          '[MidnightCutoff] Force-stopped timer for "${taskToEnd.title}" at ${now.hour}:${now.minute}',
-        );
-        return; // Don't run any other auto-end logic
+
+        if (shouldAutoStopAtPlannedEnd) {
+          if (updatedSlot != null && shouldEmitAutoEndCallback(updatedSlot)) {
+            onAutoEnd?.call(updatedTask, updatedSlot);
+          }
+        } else {
+          onMidnightCutoff?.call(updatedTask, updatedSlot ?? activeSlot);
+          debugPrint(
+            '[MidnightCutoff] Force-stopped timer for "${taskToEnd.title}" at ${now.hour}:${now.minute}',
+          );
+        }
+        return;
       }
 
+      // If we are still running before the effective stop boundary,
+      // keep existing in-app planned-end behavior for prompts/overtime sync.
       final isPastPlannedEnd = !now.isBefore(activeSlot.plannedEndTime);
 
       // Check if we've passed the planned end time
@@ -188,8 +186,24 @@ class SignalTaskProvider extends ChangeNotifier {
     return midnightCutoffForAnchor(anchorTime);
   }
 
-  bool _hasReachedMidnightCutoffForSlot(TimeSlot slot, DateTime now) {
-    return !now.isBefore(midnightCutoffForSlot(slot));
+  /// Whether this slot should auto-stop at its planned end instead of midnight.
+  @visibleForTesting
+  static bool shouldStopAtPlannedEnd(TimeSlot slot) {
+    if (!slot.autoEnd || slot.wasManualContinue) return false;
+    return !slot.plannedEndTime.isAfter(midnightCutoffForSlot(slot));
+  }
+
+  /// Effective stop boundary for background/suspended reconciliation.
+  ///
+  /// Auto-end sessions stop at plannedEndTime (unless that would cross the
+  /// hard midnight cutoff). Non-auto-end or manually-continued sessions use
+  /// the midnight cutoff.
+  @visibleForTesting
+  static DateTime effectiveAutoStopTimeForSlot(TimeSlot slot) {
+    if (shouldStopAtPlannedEnd(slot)) {
+      return slot.plannedEndTime;
+    }
+    return midnightCutoffForSlot(slot);
   }
 
   /// Throttled check for missed slots - runs at most every 2 minutes
@@ -317,40 +331,32 @@ class SignalTaskProvider extends ChangeNotifier {
       final activeSlot = task.activeTimeSlot;
       if (activeSlot == null) continue;
 
-      if (_hasReachedMidnightCutoffForSlot(activeSlot, now)) {
+      final shouldAutoStopAtPlannedEnd = shouldStopAtPlannedEnd(activeSlot);
+      final autoStopAt = effectiveAutoStopTimeForSlot(activeSlot);
+
+      if (!now.isBefore(autoStopAt)) {
         await stopTimeSlot(
           task.id,
           activeSlot.id,
-          forceKeep: true,
-          endedAt: midnightCutoffForSlot(activeSlot),
+          forceKeep: !shouldAutoStopAtPlannedEnd,
+          endedAt: autoStopAt,
         );
         final updatedTask = getTask(task.id);
         final updatedSlot = updatedTask?.timeSlots.cast<TimeSlot?>().firstWhere(
           (s) => s?.id == activeSlot.id,
           orElse: () => null,
         );
-        onMidnightCutoff?.call(updatedTask ?? task, updatedSlot ?? activeSlot);
+        if (shouldAutoStopAtPlannedEnd) {
+          if (updatedSlot != null && shouldEmitAutoEndCallback(updatedSlot)) {
+            onAutoEnd?.call(updatedTask ?? task, updatedSlot);
+          }
+        } else {
+          onMidnightCutoff?.call(
+            updatedTask ?? task,
+            updatedSlot ?? activeSlot,
+          );
+        }
         continue;
-      }
-
-      final shouldAutoEnd =
-          activeSlot.autoEnd &&
-          !activeSlot.wasManualContinue &&
-          !now.isBefore(activeSlot.plannedEndTime);
-      if (!shouldAutoEnd) continue;
-
-      await stopTimeSlot(
-        task.id,
-        activeSlot.id,
-        endedAt: activeSlot.plannedEndTime,
-      );
-      final updatedTask = getTask(task.id);
-      final updatedSlot = updatedTask?.timeSlots.cast<TimeSlot?>().firstWhere(
-        (s) => s?.id == activeSlot.id,
-        orElse: () => null,
-      );
-      if (updatedSlot != null && shouldEmitAutoEndCallback(updatedSlot)) {
-        onAutoEnd?.call(updatedTask ?? task, updatedSlot);
       }
     }
   }

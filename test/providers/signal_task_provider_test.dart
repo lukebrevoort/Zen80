@@ -118,6 +118,58 @@ void main() {
 
       expect(manualStopTime.isBefore(cutoff), isTrue);
     });
+
+    test('auto-end slot prefers planned end over midnight cutoff', () {
+      final slot = TimeSlot(
+        id: 'slot-auto-end-planned',
+        plannedStartTime: DateTime(2026, 1, 5, 18, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 20, 0),
+        sessionStartTime: DateTime(2026, 1, 5, 18, 0),
+        autoEnd: true,
+        isActive: true,
+      );
+
+      expect(SignalTaskProvider.shouldStopAtPlannedEnd(slot), isTrue);
+      expect(
+        SignalTaskProvider.effectiveAutoStopTimeForSlot(slot),
+        equals(DateTime(2026, 1, 5, 20, 0)),
+      );
+    });
+
+    test('manual-continue slot falls back to midnight cutoff', () {
+      final slot = TimeSlot(
+        id: 'slot-manual-continue',
+        plannedStartTime: DateTime(2026, 1, 5, 18, 0),
+        plannedEndTime: DateTime(2026, 1, 5, 20, 0),
+        sessionStartTime: DateTime(2026, 1, 5, 18, 0),
+        autoEnd: true,
+        wasManualContinue: true,
+        isActive: true,
+      );
+
+      expect(SignalTaskProvider.shouldStopAtPlannedEnd(slot), isFalse);
+      expect(
+        SignalTaskProvider.effectiveAutoStopTimeForSlot(slot),
+        equals(DateTime(2026, 1, 5, 23, 59)),
+      );
+    });
+
+    test('planned end after midnight cutoff still stops at midnight', () {
+      final slot = TimeSlot(
+        id: 'slot-after-midnight',
+        plannedStartTime: DateTime(2026, 1, 5, 23, 0),
+        plannedEndTime: DateTime(2026, 1, 6, 1, 0),
+        sessionStartTime: DateTime(2026, 1, 5, 23, 0),
+        autoEnd: true,
+        isActive: true,
+      );
+
+      expect(SignalTaskProvider.shouldStopAtPlannedEnd(slot), isFalse);
+      expect(
+        SignalTaskProvider.effectiveAutoStopTimeForSlot(slot),
+        equals(DateTime(2026, 1, 5, 23, 59)),
+      );
+    });
   });
 
   group('Task Limits', () {
