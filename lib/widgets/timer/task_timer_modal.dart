@@ -42,14 +42,15 @@ class TaskTimerModal extends StatefulWidget {
 
 class _TaskTimerModalState extends State<TaskTimerModal> {
   Timer? _timer;
-  late Duration _elapsed;
-  late Duration _previousElapsed;
-  bool _isPastPlannedEnd = false;
+  late final String _taskId;
+  late final String _slotId;
+  bool _isClosingForMissingData = false;
 
   @override
   void initState() {
     super.initState();
-    _calculateElapsed();
+    _taskId = widget.task.id;
+    _slotId = widget.activeSlot.id;
     _startTimer();
   }
 
@@ -59,32 +60,22 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
     super.dispose();
   }
 
-  void _calculateElapsed() {
-    // Calculate previously completed time from other time slots
-    _previousElapsed = Duration(
-      seconds: widget.task.timeSlots
-          .where((s) => s.id != widget.activeSlot.id)
+  Duration _totalElapsedFor(SignalTask task, TimeSlot activeSlot) {
+    final previousElapsed = Duration(
+      seconds: task.timeSlots
+          .where((slot) => slot.id != activeSlot.id)
           .fold<int>(0, (sum, slot) => sum + slot.actualDuration.inSeconds),
     );
-
-    // Current slot elapsed time (uses the new actualDuration getter
-    // which includes accumulatedSeconds + current session if active)
-    _elapsed = widget.activeSlot.actualDuration;
-
-    _isPastPlannedEnd = widget.activeSlot.isPastPlannedEnd;
+    return previousElapsed + activeSlot.actualDuration;
   }
 
   void _startTimer() {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) {
-        setState(() {
-          _calculateElapsed();
-        });
+        setState(() {});
       }
     });
   }
-
-  Duration get _totalElapsed => _previousElapsed + _elapsed;
 
   String _formatDuration(Duration duration) {
     final hours = duration.inHours;
@@ -107,43 +98,71 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
 
   void _stopTimer() {
     final provider = context.read<SignalTaskProvider>();
-    provider.stopTimeSlot(widget.task.id, widget.activeSlot.id);
+    provider.stopTimeSlot(_taskId, _slotId);
     Navigator.of(context).pop();
   }
 
   Future<void> _continueTimer() async {
     final provider = context.read<SignalTaskProvider>();
-    await provider.continueTimeSlot(widget.task.id, widget.activeSlot.id);
-
-    if (!mounted) return;
-
-    setState(() {
-      _calculateElapsed();
-    });
+    await provider.continueTimeSlot(_taskId, _slotId);
   }
 
   void _completeTask() {
     final provider = context.read<SignalTaskProvider>();
-    provider.stopTimeSlot(widget.task.id, widget.activeSlot.id);
-    provider.completeTask(widget.task.id);
+    provider.stopTimeSlot(_taskId, _slotId);
+    provider.completeTask(_taskId);
     Navigator.of(context).pop();
+  }
+
+  void _dismissForMissingData(String message) {
+    if (_isClosingForMissingData) return;
+    _isClosingForMissingData = true;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.showSnackBar(SnackBar(content: Text(message)));
+
+      if (Navigator.of(context).canPop()) {
+        Navigator.of(context).pop();
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final taskProvider = context.watch<SignalTaskProvider>();
+    final task = taskProvider.getTask(_taskId);
+    if (task == null) {
+      _dismissForMissingData('This timer task was removed.');
+      return const SizedBox.shrink();
+    }
+
+    final activeSlot = task.timeSlots.cast<TimeSlot?>().firstWhere(
+      (slot) => slot?.id == _slotId,
+      orElse: () => null,
+    );
+    if (activeSlot == null || !activeSlot.isActive) {
+      _dismissForMissingData(
+        'This timer session ended or is no longer available.',
+      );
+      return const SizedBox.shrink();
+    }
+
+    final totalElapsed = _totalElapsedFor(task, activeSlot);
+    final isPastPlannedEnd = activeSlot.isPastPlannedEnd;
+
     final tagProvider = context.watch<TagProvider>();
-    final tags = widget.task.tagIds
+    final tags = task.tagIds
         .map((id) => tagProvider.getTag(id))
         .whereType<Tag>()
         .toList();
 
     // Calculate progress towards estimated time
-    final estimatedDuration = Duration(minutes: widget.task.estimatedMinutes);
+    final estimatedDuration = Duration(minutes: task.estimatedMinutes);
     final progress = estimatedDuration.inSeconds > 0
-        ? (_totalElapsed.inSeconds / estimatedDuration.inSeconds).clamp(
-            0.0,
-            1.5,
-          )
+        ? (totalElapsed.inSeconds / estimatedDuration.inSeconds).clamp(0.0, 1.5)
         : 0.0;
 
     return Container(
@@ -170,7 +189,7 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
 
               // Task title
               Text(
-                widget.task.title,
+                task.title,
                 style: const TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -191,12 +210,12 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
 
               // Timer display
               Text(
-                _formatDuration(_totalElapsed),
+                _formatDuration(totalElapsed),
                 style: TextStyle(
                   fontSize: 56,
                   fontWeight: FontWeight.w300,
                   fontFeatures: const [FontFeature.tabularFigures()],
-                  color: _isPastPlannedEnd
+                  color: isPastPlannedEnd
                       ? Colors.orange.shade700
                       : Colors.black,
                 ),
@@ -229,7 +248,7 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
                         ),
                       ),
                       Text(
-                        widget.task.formattedEstimatedTime,
+                        task.formattedEstimatedTime,
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.grey.shade600,
@@ -243,14 +262,13 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
 
               // Scheduled time info
               Text(
-                'Scheduled: ${_formatTime(widget.activeSlot.plannedStartTime)} - ${_formatTime(widget.activeSlot.plannedEndTime)}',
+                'Scheduled: ${_formatTime(activeSlot.plannedStartTime)} - ${_formatTime(activeSlot.plannedEndTime)}',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 24),
 
               // Past end time warning
-              if (_isPastPlannedEnd &&
-                  !widget.activeSlot.wasManualContinue) ...[
+              if (isPastPlannedEnd && !activeSlot.wasManualContinue) ...[
                 Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
@@ -291,8 +309,8 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
               ],
 
               // Linked subtasks (if any)
-              if (widget.activeSlot.linkedSubTaskIds.isNotEmpty) ...[
-                _buildLinkedSubTasks(),
+              if (activeSlot.linkedSubTaskIds.isNotEmpty) ...[
+                _buildLinkedSubTasks(task, activeSlot),
                 const SizedBox(height: 24),
               ],
 
@@ -300,8 +318,7 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
               Row(
                 children: [
                   // Continue button (only if past end time)
-                  if (_isPastPlannedEnd &&
-                      !widget.activeSlot.wasManualContinue) ...[
+                  if (isPastPlannedEnd && !activeSlot.wasManualContinue) ...[
                     Expanded(
                       child: OutlinedButton.icon(
                         onPressed: _continueTimer,
@@ -355,9 +372,9 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
     );
   }
 
-  Widget _buildLinkedSubTasks() {
-    final linkedSubTasks = widget.task.subTasks
-        .where((st) => widget.activeSlot.linkedSubTaskIds.contains(st.id))
+  Widget _buildLinkedSubTasks(SignalTask task, TimeSlot activeSlot) {
+    final linkedSubTasks = task.subTasks
+        .where((st) => activeSlot.linkedSubTaskIds.contains(st.id))
         .toList();
 
     if (linkedSubTasks.isEmpty) return const SizedBox.shrink();
@@ -388,7 +405,7 @@ class _TaskTimerModalState extends State<TaskTimerModal> {
                   value: subTask.isChecked,
                   onChanged: (value) {
                     final provider = context.read<SignalTaskProvider>();
-                    provider.toggleSubTask(widget.task.id, subTask.id);
+                    provider.toggleSubTask(_taskId, subTask.id);
                   },
                   activeColor: Colors.black,
                 ),
